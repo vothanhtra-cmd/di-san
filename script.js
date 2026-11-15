@@ -4,6 +4,7 @@
 import { app, auth, db, initializeFirebase, provider, storage } from "./firebase-config.js";
 import { getAnalytics, isSupported } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-analytics.js";
 import {
+  arrayUnion,
   collection,
   collectionGroup,
   deleteDoc,
@@ -17,6 +18,7 @@ import {
   serverTimestamp,
   setDoc,
   Timestamp,
+  updateDoc,
   where
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import {
@@ -38,6 +40,8 @@ const MAX_FILE_SIZES = {
   audio: 10 * 1024 * 1024,
   video: 20 * 1024 * 1024
 };
+const MAX_INLINE_IMAGE_SIZE = 2 * 1024 * 1024;
+const MAX_FIRESTORE_POST_SIZE_BYTES = 900 * 1024;
 const AUDIO_TOO_LARGE_MESSAGE =
   "Tệp ghi âm quá lớn! Vui lòng chọn file ghi âm có dung lượng dưới 10MB.";
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
@@ -335,6 +339,29 @@ function collectAttachments() {
   return attachments;
 }
 
+function readFileAsDataUrl(file) {
+  if (file.size >= MAX_INLINE_IMAGE_SIZE) {
+    return Promise.reject(new Error(
+      "Ảnh \"" + file.name + "\" phải có dung lượng dưới 2 MB."
+    ));
+  }
+
+  return new Promise(function (resolve, reject) {
+    const reader = new FileReader();
+    reader.onload = function () {
+      if (typeof reader.result !== "string") {
+        reject(new Error("Không thể chuyển ảnh \"" + file.name + "\" sang Base64."));
+        return;
+      }
+      resolve(reader.result);
+    };
+    reader.onerror = function () {
+      reject(reader.error || new Error("Không thể đọc ảnh \"" + file.name + "\"."));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function createMediaElement(attachment, source) {
   let element;
   if (attachment.kind === "image") {
@@ -366,7 +393,7 @@ function addMediaItem(container, attachment, source) {
   container.appendChild(item);
 }
 
-// Hiển thị ảnh/âm thanh/video đã chọn trước khi tải lên Firebase.
+// Hiển thị ảnh/âm thanh/video đã chọn trước khi đăng bài.
 function renderPreview() {
   previewUrls.forEach(function (url) {
     URL.revokeObjectURL(url);
@@ -618,7 +645,10 @@ function renderPosts() {
   postsList.replaceChildren();
   const visiblePosts = posts
     .filter(function (post) {
-      return !currentCategory || post.category === currentCategory;
+      const hiddenByCurrentUser = currentUser
+        && post.hiddenBy.indexOf(currentUser.uid) !== -1;
+      return !hiddenByCurrentUser
+        && (!currentCategory || post.category === currentCategory);
     })
     .sort(function (first, second) {
       return second.createdAt - first.createdAt;
@@ -670,6 +700,17 @@ function renderPosts() {
       });
       headerItems.push(deleteButton);
     }
+    if (currentUser) {
+      const hideButton = document.createElement("button");
+      hideButton.className = "hide-post-button";
+      hideButton.type = "button";
+      hideButton.textContent = "Ẩn bài viết";
+      hideButton.setAttribute("aria-label", "Ẩn bài viết: " + post.title);
+      hideButton.addEventListener("click", function () {
+        hidePost(post, hideButton);
+      });
+      headerItems.push(hideButton);
+    }
 
     header.append.apply(header, headerItems);
     card.appendChild(header);
@@ -679,10 +720,13 @@ function renderPosts() {
     content.textContent = post.content;
     card.appendChild(content);
 
-    if (post.attachments.length > 0) {
+    const postMedia = post.imageUrl
+      ? [{ name: "Hình ảnh", kind: "image", url: post.imageUrl }].concat(post.attachments)
+      : post.attachments;
+    if (postMedia.length > 0) {
       const media = document.createElement("div");
       media.className = "post-media";
-      post.attachments.forEach(function (attachment) {
+      postMedia.forEach(function (attachment) {
         addMediaItem(media, attachment, attachment.url);
       });
       card.appendChild(media);
@@ -830,7 +874,10 @@ function appendProfileEmptyState(container, message) {
 
 function renderProfilePosts(userId, postCount, isOwner) {
   const userPosts = posts
-    .filter(function (post) { return post.userId === userId; })
+    .filter(function (post) {
+      return post.userId === userId
+        && (!currentUser || post.hiddenBy.indexOf(currentUser.uid) === -1);
+    })
     .sort(function (first, second) { return second.createdAt - first.createdAt; });
   const postLimit = isOwner && isAdminUser(auth.currentUser) ? "∞" : MAX_POSTS_PER_USER;
   profilePostsHeading.textContent = (isOwner ? "Bài viết của bạn (" : "Bài viết của thành viên (")
@@ -1711,17 +1758,24 @@ form.addEventListener("submit", async function (event) {
     return;
   }
   const oversizedAttachment = selectedAttachments.find(function (attachment) {
-    return !MAX_FILE_SIZES[attachment.kind] || attachment.blob.size > MAX_FILE_SIZES[attachment.kind];
+    if (attachment.kind === "image") {
+      return attachment.blob.size >= MAX_INLINE_IMAGE_SIZE;
+    }
+    return !MAX_FILE_SIZES[attachment.kind]
+      || attachment.blob.size > MAX_FILE_SIZES[attachment.kind];
   });
   if (oversizedAttachment) {
     if (oversizedAttachment.kind === "audio") {
       showAudioTooLarge();
       return;
     }
-    const maxSize = MAX_FILE_SIZES[oversizedAttachment.kind] || 0;
+    const maxSize = oversizedAttachment.kind === "image"
+      ? MAX_INLINE_IMAGE_SIZE
+      : (MAX_FILE_SIZES[oversizedAttachment.kind] || 0);
     showStatus(
       "Tệp \"" + oversizedAttachment.name + "\" vượt quá giới hạn "
-        + (maxSize / (1024 * 1024)) + " MB.",
+        + (maxSize / (1024 * 1024)) + " MB"
+        + (oversizedAttachment.kind === "image" ? " (ảnh phải nhỏ hơn giới hạn)." : "."),
       true
     );
     return;
@@ -1734,18 +1788,37 @@ form.addEventListener("submit", async function (event) {
 
   const postRef = doc(collection(db, "posts"));
   const uploaded = [];
+  const postAttachments = [];
+  let postDataImageUrl = "";
   try {
     for (let index = 0; index < selectedAttachments.length; index += 1) {
-      const uploadedAttachment = await uploadAttachment(
-        user.uid,
-        postRef.id,
-        selectedAttachments[index],
-        index
-      );
-      uploaded.push(uploadedAttachment);
+      const attachment = selectedAttachments[index];
+      if (attachment.kind === "image") {
+        showStatus("Đang chuyển ảnh " + attachment.name + " sang Base64...", false);
+        const imageUrl = await readFileAsDataUrl(attachment.blob);
+        if (!postDataImageUrl) {
+          postDataImageUrl = imageUrl;
+        } else {
+          postAttachments.push({
+            name: attachment.name,
+            type: attachment.type,
+            kind: attachment.kind,
+            url: imageUrl
+          });
+        }
+      } else {
+        const uploadedAttachment = await uploadAttachment(
+          user.uid,
+          postRef.id,
+          attachment,
+          index
+        );
+        uploaded.push(uploadedAttachment);
+        postAttachments.push(uploadedAttachment);
+      }
     }
 
-    await createPostWithLimit(postRef, {
+    const postData = {
       title: title,
       category: categoryInput.value,
       content: content,
@@ -1753,8 +1826,18 @@ form.addEventListener("submit", async function (event) {
       userId: user.uid,
       authorName: authorName,
       authorPhotoURL: user.photoURL || "",
-      attachments: uploaded
-    }, user, is_admin);
+      imageUrl: postDataImageUrl,
+      attachments: postAttachments
+    };
+    const postSizeEstimate = Object.assign({}, postData, { createdAt: "" });
+    if (new Blob([JSON.stringify(postSizeEstimate)]).size > MAX_FIRESTORE_POST_SIZE_BYTES) {
+      throw new Error(
+        "Ảnh và nội dung vượt quá dung lượng an toàn của Firestore. "
+          + "Hãy giảm kích thước ảnh hoặc rút ngắn nội dung bài viết."
+      );
+    }
+
+    await createPostWithLimit(postRef, postData, user, is_admin);
 
     currentCategory = null;
     updateCategoryNavigation();
@@ -1793,6 +1876,7 @@ async function deletePost(post, button) {
         activeProfileIsOwner
       );
     }
+
     let cleanupFailures = 0;
     for (const attachment of post.attachments) {
       if (!attachment.storagePath) {
@@ -1823,6 +1907,36 @@ async function deletePost(post, button) {
     } else {
       setProfilePageStatus(message, true);
     }
+  }
+}
+
+async function hidePost(post, button) {
+  const user = auth.currentUser;
+  if (!user) {
+    showStatus("Hãy đăng nhập để ẩn bài viết.", true);
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    await updateDoc(doc(db, "posts", post.id), {
+      hiddenBy: arrayUnion(user.uid)
+    });
+    post.hiddenBy = Array.from(new Set(post.hiddenBy.concat(user.uid)));
+    renderPosts();
+    if (activeProfileId) {
+      const activeProfile = profileCache.get(activeProfileId) || {};
+      renderProfilePosts(
+        activeProfileId,
+        Number.isInteger(activeProfile.postCount) ? activeProfile.postCount : 0,
+        activeProfileIsOwner
+      );
+    }
+    showStatus("Bài viết đã được ẩn khỏi danh sách của bạn.", false, true);
+  } catch (error) {
+    showStatus("Không thể ẩn bài viết: " + error.message, true);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -1986,9 +2100,11 @@ function subscribeToPosts() {
           category: data.category,
           content: data.content,
           createdAt: createdAt,
-          userId: data.userId,
+          userId: typeof data.userId === "string" ? data.userId : data.authorUid,
           authorName: data.authorName,
           authorPhotoURL: data.authorPhotoURL || "",
+          imageUrl: typeof data.imageUrl === "string" ? data.imageUrl : "",
+          hiddenBy: Array.isArray(data.hiddenBy) ? data.hiddenBy : [],
           attachments: Array.isArray(data.attachments) ? data.attachments : []
         };
       });

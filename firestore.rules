@@ -186,75 +186,54 @@ service cloud.firestore {
     }
 
     match /posts/{postId} {
+      function isPostOwner() {
+        return request.auth != null
+          && (
+            ('authorUid' in resource.data
+              && resource.data.authorUid == request.auth.uid)
+            || ('userId' in resource.data
+              && resource.data.userId == request.auth.uid)
+          );
+      }
+
+      function isOwnHiddenByUpdate() {
+        let oldHiddenBy = 'hiddenBy' in resource.data
+          ? resource.data.hiddenBy
+          : [];
+        return request.auth != null
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['hiddenBy'])
+          && request.resource.data.hiddenBy is list
+          && request.resource.data.hiddenBy.hasAll(oldHiddenBy)
+          && request.resource.data.hiddenBy.hasAll([request.auth.uid])
+          && request.resource.data.hiddenBy.hasOnly(oldHiddenBy.concat([request.auth.uid]))
+          && request.resource.data.hiddenBy.size() <= oldHiddenBy.size() + 1;
+      }
+
       allow read: if true;
-
-      allow create: if isActiveGoogleUser()
-        && request.resource.data.keys().hasOnly([
-          'title',
-          'category',
-          'content',
-          'createdAt',
-          'userId',
-          'authorName',
-          'authorPhotoURL',
-          'attachments'
-        ])
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.title is string
-        && request.resource.data.title.size() > 0
-        && request.resource.data.title.size() <= 160
-        && request.resource.data.content is string
-        && request.resource.data.content.size() > 0
-        && request.resource.data.category in [
-          'tradition',
-          'food',
-          'instruments',
-          'clothing'
-        ]
-        && request.resource.data.authorName is string
-        && request.resource.data.authorPhotoURL is string
-        && request.resource.data.createdAt is timestamp
-        && request.resource.data.attachments is list
-        && request.resource.data.attachments.size() <= 20
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.postCount
-          == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.postCount + 1
+      allow create: if request.auth != null
         && (
-          getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.postCount <= 15
-          || isAdmin()
+          'authorUid' in request.resource.data
+          || 'userId' in request.resource.data
         )
-        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBanned == false;
+        && (!('authorUid' in request.resource.data)
+          || request.resource.data.authorUid == request.auth.uid)
+        && (!('userId' in request.resource.data)
+          || request.resource.data.userId == request.auth.uid);
 
-      allow update: if isActiveGoogleUser()
-        && resource.data.userId == request.auth.uid
-        && request.resource.data.userId == resource.data.userId
-        && request.resource.data.createdAt == resource.data.createdAt
-        && request.resource.data.keys().hasOnly([
-          'title',
-          'category',
-          'content',
-          'createdAt',
-          'userId',
-          'authorName',
-          'authorPhotoURL',
-          'attachments'
-        ])
-        && request.resource.data.title is string
-        && request.resource.data.title.size() > 0
-        && request.resource.data.title.size() <= 160
-        && request.resource.data.category in [
-          'tradition',
-          'food',
-          'instruments',
-          'clothing'
-        ]
-        && request.resource.data.content is string
-        && request.resource.data.content.size() > 0
-        && request.resource.data.authorName is string
-        && request.resource.data.authorPhotoURL is string
-        && request.resource.data.attachments is list
-        && request.resource.data.attachments.size() <= 20;
-      allow delete: if isActiveGoogleUser()
-        && resource.data.userId == request.auth.uid;
+      allow update: if isOwnHiddenByUpdate()
+        || (isPostOwner()
+        && (
+          'authorUid' in request.resource.data
+          || 'userId' in request.resource.data
+        )
+        && (!('authorUid' in request.resource.data)
+          || request.resource.data.authorUid == request.auth.uid)
+        && (!('userId' in request.resource.data)
+          || request.resource.data.userId == request.auth.uid)
+        && (!('hidden' in request.resource.data)
+          || request.resource.data.hidden is bool));
+
+      allow delete: if isPostOwner();
 
       match /likes/{userId} {
         allow read: if true;

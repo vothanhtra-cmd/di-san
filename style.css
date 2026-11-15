@@ -950,6 +950,22 @@ p {
   background: #fbefec;
 }
 
+.hide-post-button {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid #d5c9b8;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--clay-dark);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.hide-post-button:hover {
+  background: #f8f2e9;
+}
+
 .post-content {
   margin: 16px 0 0;
   color: #514a43;
