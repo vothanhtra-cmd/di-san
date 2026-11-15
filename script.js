@@ -46,7 +46,10 @@ const AUDIO_TOO_LARGE_MESSAGE =
   "Tệp ghi âm quá lớn! Vui lòng chọn file ghi âm có dung lượng dưới 10MB.";
 const MAX_AVATAR_SIZE = 2 * 1024 * 1024;
 const MAX_POSTS_PER_USER = 15;
-const ADMIN_EMAILS = ["vothanhtra0812@gmail.com"];
+const ADMIN_EMAILS = [
+  "vothanhtra0812@gmail.com",
+  "nguyenthuong250112011@gmail.com"
+];
 const MAX_VIOLATIONS = 5;
 const USERNAME_CHANGE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_ATTACHMENTS_PER_POST = 20;
@@ -120,6 +123,27 @@ const profileCommentsList = document.getElementById("profile-comments-list");
 const homeLink = document.getElementById("home-link");
 const categoryLinks = Array.from(document.querySelectorAll(".category-nav [data-category]"));
 
+const adminMemberPanel = document.createElement("section");
+adminMemberPanel.className = "admin-member-panel panel";
+adminMemberPanel.hidden = true;
+const adminMemberTitle = document.createElement("h2");
+adminMemberTitle.textContent = "Quản lý thành viên";
+const adminMemberDescription = document.createElement("p");
+adminMemberDescription.textContent =
+  "Khóa tài khoản sẽ chặn đăng bài và ẩn toàn bộ bài viết của thành viên.";
+const adminMemberStatus = document.createElement("p");
+adminMemberStatus.className = "form-status";
+adminMemberStatus.setAttribute("role", "status");
+const adminMemberList = document.createElement("div");
+adminMemberList.className = "admin-member-list";
+adminMemberPanel.append(
+  adminMemberTitle,
+  adminMemberDescription,
+  adminMemberStatus,
+  adminMemberList
+);
+postsSection.parentNode.insertBefore(adminMemberPanel, postsSection);
+
 function isAdminUser(user) {
   const email = user && typeof user.email === "string" ? user.email.trim().toLowerCase() : "";
   return ADMIN_EMAILS.some(function (adminEmail) {
@@ -151,11 +175,213 @@ const interactionState = new Map();
 const interactionUnsubscribers = new Map();
 const profileCache = new Map();
 const profileUnsubscribers = new Map();
+const bannedUserIds = new Set();
+const adminBanSyncInProgress = new Set();
+let bannedUsersUnsubscribe = null;
+let adminUsersUnsubscribe = null;
+let bannedUsersLoaded = false;
+let adminMembers = [];
 
 function showStatus(message, isError, isSuccess) {
   formStatus.textContent = message;
   formStatus.classList.toggle("is-error", Boolean(isError));
   formStatus.classList.toggle("is-success", Boolean(isSuccess));
+}
+
+function setAdminMemberStatus(message, isError) {
+  adminMemberStatus.textContent = message;
+  adminMemberStatus.classList.toggle("is-error", Boolean(isError));
+  adminMemberStatus.classList.toggle("is-success", Boolean(message) && !isError);
+}
+
+function renderAdminMembers(members) {
+  adminMemberList.replaceChildren();
+  if (members.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "profile-muted";
+    empty.textContent = "Chưa có hồ sơ thành viên.";
+    adminMemberList.appendChild(empty);
+    return;
+  }
+
+  members.slice().sort(function (first, second) {
+    return (first.displayName || first.uid).localeCompare(second.displayName || second.uid);
+  }).forEach(function (member) {
+    const row = document.createElement("article");
+    row.className = "profile-list-item admin-member-row";
+
+    const details = document.createElement("div");
+    details.className = "profile-list-item-text";
+    const name = document.createElement("h3");
+    name.textContent = member.displayName || "Thành viên";
+    const status = document.createElement("p");
+    status.textContent = (member.isBanned ? "Đang bị khóa" : "Đang hoạt động")
+      + " · Vi phạm: " + member.violationCount + "/" + MAX_VIOLATIONS
+      + " · UID: " + member.uid;
+    details.append(name, status);
+    row.appendChild(details);
+
+    const button = document.createElement("button");
+    button.className = "button button-outline";
+    button.type = "button";
+    button.textContent = member.isBanned ? "Mở khóa" : "Khóa tài khoản";
+    button.disabled = Boolean(currentUser && member.uid === currentUser.uid);
+    button.addEventListener("click", function () {
+      if (member.uid === (currentUser && currentUser.uid)) {
+        return;
+      }
+      const nextBannedState = !member.isBanned;
+      const action = nextBannedState ? "khóa" : "mở khóa";
+      if (window.confirm("Bạn có chắc muốn " + action + " tài khoản này?")) {
+        setMemberBanned(member.uid, nextBannedState, button);
+      }
+    });
+    row.appendChild(button);
+    adminMemberList.appendChild(row);
+  });
+}
+
+function syncAdminBanRegistry(member) {
+  if (!bannedUsersLoaded) {
+    return;
+  }
+  const shouldBeBanned = member.isBanned === true;
+  if (shouldBeBanned === bannedUserIds.has(member.uid)
+    || adminBanSyncInProgress.has(member.uid)) {
+    return;
+  }
+
+  adminBanSyncInProgress.add(member.uid);
+  const banRef = doc(db, "bannedUsers", member.uid);
+  const sync = shouldBeBanned
+    ? setDoc(banRef, { uid: member.uid, bannedAt: serverTimestamp() }, { merge: true })
+    : deleteDoc(banRef);
+  sync.catch(function (error) {
+    console.error("Không thể đồng bộ danh sách tài khoản bị khóa:", error);
+    setAdminMemberStatus("Không thể đồng bộ UID " + member.uid + ": " + error.message, true);
+  }).finally(function () {
+    adminBanSyncInProgress.delete(member.uid);
+  });
+}
+
+function subscribeToBannedUsers() {
+  if (bannedUsersUnsubscribe) {
+    bannedUsersUnsubscribe();
+  }
+  bannedUsersUnsubscribe = onSnapshot(collection(db, "bannedUsers"), function (snapshot) {
+    bannedUsersLoaded = true;
+    bannedUserIds.clear();
+    snapshot.docs.forEach(function (documentSnapshot) {
+      bannedUserIds.add(documentSnapshot.id);
+    });
+    adminMembers.forEach(syncAdminBanRegistry);
+    renderPosts();
+    if (activeProfileId) {
+      const profile = profileCache.get(activeProfileId) || {};
+      renderProfilePosts(
+        activeProfileId,
+        Number.isInteger(profile.postCount) ? profile.postCount : 0,
+        activeProfileIsOwner
+      );
+    }
+  }, function (error) {
+    console.error("Không thể tải danh sách tài khoản bị khóa:", error);
+    postsList.replaceChildren();
+    const message = document.createElement("p");
+    message.className = "empty-state";
+    message.textContent =
+      "Không thể kiểm tra trạng thái tài khoản. Vui lòng tải lại trang: " + error.message;
+    postsList.appendChild(message);
+  });
+}
+
+function subscribeToAdminMembers(user) {
+  if (adminUsersUnsubscribe) {
+    adminUsersUnsubscribe();
+    adminUsersUnsubscribe = null;
+  }
+  if (!isAdminUser(user)) {
+    adminMembers = [];
+    adminMemberList.replaceChildren();
+    return;
+  }
+
+  adminUsersUnsubscribe = onSnapshot(collection(db, "users"), function (snapshot) {
+    adminMembers = snapshot.docs.map(function (documentSnapshot) {
+      const profile = documentSnapshot.data();
+      return {
+        uid: documentSnapshot.id,
+        displayName: profile.displayName || "",
+        postCount: Number.isInteger(profile.postCount) ? profile.postCount : 0,
+        violationCount: Number.isInteger(profile.violationCount) ? profile.violationCount : 0,
+        isBanned: profile.isBanned === true
+      };
+    });
+    adminMembers.forEach(syncAdminBanRegistry);
+    renderAdminMembers(adminMembers);
+    setAdminMemberStatus("Đã tải " + adminMembers.length + " hồ sơ thành viên.", false);
+  }, function (error) {
+    console.error("Không thể tải danh sách thành viên:", error);
+    setAdminMemberStatus("Không thể tải thành viên: " + error.message, true);
+  });
+}
+
+async function setMemberBanned(userId, shouldBeBanned, button) {
+  if (!isAdminUser(auth.currentUser) || userId === auth.currentUser.uid) {
+    return;
+  }
+
+  button.disabled = true;
+  adminBanSyncInProgress.add(userId);
+  setAdminMemberStatus(shouldBeBanned ? "Đang khóa tài khoản..." : "Đang mở khóa tài khoản.", false);
+  const profileRef = doc(db, "users", userId);
+  const banRef = doc(db, "bannedUsers", userId);
+  try {
+    await runTransaction(db, async function (transaction) {
+      const profileSnapshot = await transaction.get(profileRef);
+      const banSnapshot = await transaction.get(banRef);
+      if (!profileSnapshot.exists()) {
+        throw new Error("Không tìm thấy hồ sơ thành viên.");
+      }
+
+      const profile = profileSnapshot.data();
+      const violationCount = Number.isInteger(profile.violationCount)
+        ? profile.violationCount
+        : 0;
+      if (shouldBeBanned) {
+        if (profile.isBanned !== true) {
+          transaction.update(profileRef, {
+            isBanned: true,
+            violationCount: violationCount,
+            updatedAt: serverTimestamp()
+          });
+        }
+        if (!banSnapshot.exists()) {
+          transaction.set(banRef, { uid: userId, bannedAt: serverTimestamp() });
+        }
+      } else {
+        if (profile.isBanned === true || violationCount !== 0) {
+          transaction.update(profileRef, {
+            isBanned: false,
+            violationCount: 0,
+            updatedAt: serverTimestamp()
+          });
+        }
+        if (banSnapshot.exists()) {
+          transaction.delete(banRef);
+        }
+      }
+    });
+    setAdminMemberStatus(
+      shouldBeBanned ? "Đã khóa tài khoản." : "Đã mở khóa tài khoản.",
+      false
+    );
+  } catch (error) {
+    setAdminMemberStatus("Không thể cập nhật tài khoản: " + error.message, true);
+  } finally {
+    adminBanSyncInProgress.delete(userId);
+    button.disabled = false;
+  }
 }
 
 function setRecordingStatus(message, isRecording) {
@@ -191,6 +417,7 @@ function updateAuthControls(user) {
   }
   const signedIn = Boolean(currentUser);
   const isAdmin = isAdminUser(currentUser);
+  adminMemberPanel.hidden = !signedIn || !isAdmin || !profilePage.hidden;
   authStatus.textContent = firebaseReady
     ? "Bạn cần đăng nhập bằng Google để đăng bài viết."
     : "Không thể kết nối Firebase. Vui lòng thử lại sau.";
@@ -235,7 +462,7 @@ function updateAuthControls(user) {
     || currentUserBanned || isUpdatingDisplayName;
   avatarInput.disabled = !signedIn || !profileReady || currentUserBanned;
   if (signedIn && currentUserBanned) {
-    formStatus.textContent = "Tài khoản của bạn đã bị khóa vĩnh viễn do vi phạm nội dung 5 lần.";
+    formStatus.textContent = "Tài khoản của bạn đang bị khóa. Vui lòng liên hệ quản trị viên.";
     formStatus.classList.add("is-error");
     formStatus.classList.remove("is-success");
   } else if (signedIn && !isAdmin && currentPostCount >= MAX_POSTS_PER_USER) {
@@ -638,16 +865,27 @@ function updateCategoryNavigation() {
 
 // Hiển thị bài viết theo bộ lọc; dữ liệu bài viết được đồng bộ thời gian thực từ Firestore.
 function renderPosts() {
+  postsList.replaceChildren();
+  if (firebaseReady && !bannedUsersLoaded) {
+    const loading = document.createElement("p");
+    loading.className = "empty-state";
+    loading.textContent = "Đang kiểm tra trạng thái tài khoản...";
+    postsList.appendChild(loading);
+    return;
+  }
   if (firebaseReady) {
     ensureInteractionSubscriptions();
     ensureProfileSubscriptions();
   }
-  postsList.replaceChildren();
   const visiblePosts = posts
     .filter(function (post) {
       const hiddenByCurrentUser = currentUser
         && post.hiddenBy.indexOf(currentUser.uid) !== -1;
+      const authorProfile = profileCache.get(post.userId) || {};
+      const authorIsBanned = post.userId
+        && (bannedUserIds.has(post.userId) || authorProfile.isBanned === true);
       return !hiddenByCurrentUser
+        && !authorIsBanned
         && (!currentCategory || post.category === currentCategory);
     })
     .sort(function (first, second) {
@@ -689,7 +927,18 @@ function renderPosts() {
     headingGroup.appendChild(author);
 
     const headerItems = [headingGroup];
-    if (currentUser && !currentUserBanned && post.userId === currentUser.uid) {
+    if (currentUser && !currentUserBanned
+      && (post.userId === currentUser.uid || isAdminUser(currentUser))) {
+      const editButton = document.createElement("button");
+      editButton.className = "edit-post-button";
+      editButton.type = "button";
+      editButton.textContent = "Sửa";
+      editButton.setAttribute("aria-label", "Sửa bài viết: " + post.title);
+      editButton.addEventListener("click", function () {
+        editPost(post, editButton);
+      });
+      headerItems.push(editButton);
+
       const deleteButton = document.createElement("button");
       deleteButton.className = "delete-button";
       deleteButton.type = "button";
@@ -873,23 +1122,31 @@ function appendProfileEmptyState(container, message) {
 }
 
 function renderProfilePosts(userId, postCount, isOwner) {
+  profilePostsList.replaceChildren();
+  if (firebaseReady && !bannedUsersLoaded) {
+    appendProfileEmptyState(profilePostsList, "Đang kiểm tra trạng thái tài khoản...");
+    return;
+  }
   const userPosts = posts
     .filter(function (post) {
+      const authorProfile = profileCache.get(post.userId) || {};
+      const authorIsBanned = post.userId
+        && (bannedUserIds.has(post.userId) || authorProfile.isBanned === true);
       return post.userId === userId
+        && !authorIsBanned
         && (!currentUser || post.hiddenBy.indexOf(currentUser.uid) === -1);
     })
     .sort(function (first, second) { return second.createdAt - first.createdAt; });
   const postLimit = isOwner && isAdminUser(auth.currentUser) ? "∞" : MAX_POSTS_PER_USER;
   profilePostsHeading.textContent = (isOwner ? "Bài viết của bạn (" : "Bài viết của thành viên (")
     + postCount + "/" + postLimit + ")";
-  profilePostsList.replaceChildren();
   if (userPosts.length === 0) {
     appendProfileEmptyState(profilePostsList, "Chưa có bài viết nào.");
     return;
   }
   userPosts.forEach(function (post) {
     let deleteButton = null;
-    if (isOwner && !currentUserBanned) {
+    if ((isOwner || isAdminUser(currentUser)) && !currentUserBanned) {
       deleteButton = document.createElement("button");
       deleteButton.className = "delete-button";
       deleteButton.type = "button";
@@ -1321,6 +1578,7 @@ function watchCurrentProfile(user) {
 
 async function registerContentViolation() {
   const profileRef = doc(db, "users", currentUser.uid);
+  const banRef = doc(db, "bannedUsers", currentUser.uid);
   return runTransaction(db, async function (transaction) {
     const snapshot = await transaction.get(profileRef);
     if (!snapshot.exists()) {
@@ -1337,6 +1595,12 @@ async function registerContentViolation() {
       isBanned: nextCount >= MAX_VIOLATIONS,
       updatedAt: serverTimestamp()
     });
+    if (nextCount >= MAX_VIOLATIONS) {
+      transaction.set(banRef, {
+        uid: currentUser.uid,
+        bannedAt: serverTimestamp()
+      });
+    }
     return { count: nextCount, isBanned: nextCount >= MAX_VIOLATIONS };
   });
 }
@@ -1707,12 +1971,12 @@ form.addEventListener("submit", async function (event) {
   }
   const userEmail = auth.currentUser.email || "";
   console.log("=== EMAIL ĐĂNG NHẬP ===", userEmail);
-  let is_admin = false;
-  let authorName = user.displayName || getCurrentDisplayName() || "Người dùng";
+  const is_admin = isAdminUser(user);
+  let authorName = is_admin
+    ? "Admin"
+    : (user.displayName || getCurrentDisplayName() || "Người dùng");
   let existingPostCount = currentPostCount;
-  if (userEmail === "vothanhtra0812@gmail.com") {
-    is_admin = true;
-    authorName = "Admin";
+  if (is_admin) {
     console.log(">>> XÁC NHẬN: ĐÃ LÊN ADMIN THÀNH CÔNG! <<<");
   } else {
     try {
@@ -1907,6 +2171,54 @@ async function deletePost(post, button) {
     } else {
       setProfilePageStatus(message, true);
     }
+  }
+}
+
+async function editPost(post, button) {
+  const title = window.prompt("Tiêu đề bài viết:", post.title);
+  if (title === null) {
+    return;
+  }
+  const category = window.prompt(
+    "Mã chuyên mục (tradition, food, instruments, clothing):",
+    post.category
+  );
+  if (category === null) {
+    return;
+  }
+  const content = window.prompt("Nội dung bài viết:", post.content);
+  if (content === null) {
+    return;
+  }
+
+  const updatedTitle = title.trim();
+  const updatedContent = content.trim();
+  if (!updatedTitle || updatedTitle.length > 160 || !updatedContent
+    || !Object.prototype.hasOwnProperty.call(CATEGORIES, category)) {
+    showStatus("Tiêu đề, nội dung hoặc chuyên mục không hợp lệ.", true);
+    return;
+  }
+  if (containsBlockedLanguage(updatedTitle) || containsBlockedLanguage(updatedContent)) {
+    showStatus("Tiêu đề hoặc nội dung chứa từ ngữ không phù hợp.", true);
+    return;
+  }
+
+  button.disabled = true;
+  try {
+    await updateDoc(doc(db, "posts", post.id), {
+      title: updatedTitle,
+      category: category,
+      content: updatedContent
+    });
+    post.title = updatedTitle;
+    post.category = category;
+    post.content = updatedContent;
+    renderPosts();
+    showStatus("Đã cập nhật bài viết.", false, true);
+  } catch (error) {
+    showStatus("Không thể cập nhật bài viết: " + error.message, true);
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -2133,10 +2445,12 @@ function subscribeToPosts() {
 if (firebaseReady) {
   updateAuthControls();
   subscribeToPosts();
+  subscribeToBannedUsers();
   onAuthStateChanged(
     auth,
     async function (user) {
       currentUser = user;
+      subscribeToAdminMembers(user);
       currentPostCount = 0;
       currentViolationCount = 0;
       currentUserBanned = false;

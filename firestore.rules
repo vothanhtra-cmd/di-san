@@ -13,13 +13,17 @@ service cloud.firestore {
 
     function isAdmin() {
       return isGoogleUser()
-        && request.auth.token.email == 'vothanhtra0812@gmail.com';
+        && request.auth.token.email in [
+          'vothanhtra0812@gmail.com',
+          'nguyenthuong250112011@gmail.com'
+        ];
     }
 
     function isActiveGoogleUser() {
       return isGoogleUser()
         && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBanned == false;
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBanned == false
+        && !exists(/databases/$(database)/documents/bannedUsers/$(request.auth.uid));
     }
 
     match /users/{userId} {
@@ -86,7 +90,31 @@ service cloud.firestore {
           );
       }
 
-      allow read: if isOwnProfile(userId)
+      function isAdminBanUpdate() {
+        let oldViolationCount = 'violationCount' in resource.data
+          ? resource.data.violationCount
+          : 0;
+        return isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+            'isBanned',
+            'violationCount',
+            'updatedAt'
+          ])
+          && request.resource.data.isBanned is bool
+          && request.resource.data.violationCount is int
+          && request.resource.data.violationCount >= 0
+          && request.resource.data.violationCount <= 5
+          && request.resource.data.updatedAt is timestamp
+          && (
+            (request.resource.data.isBanned
+              && request.resource.data.violationCount == oldViolationCount)
+            || (!request.resource.data.isBanned
+              && request.resource.data.violationCount == 0)
+          );
+      }
+
+      allow read: if isAdmin()
+        || isOwnProfile(userId)
         || !('privacySettings' in resource.data)
         || resource.data.privacySettings.profileVisibility != 'private';
 
@@ -134,7 +162,8 @@ service cloud.firestore {
         && validPrivacySettings()
         && request.resource.data.updatedAt is timestamp;
 
-      allow update: if isOwnProfile(userId)
+      allow update: if isAdminBanUpdate()
+        || (isOwnProfile(userId)
         && (!('isBanned' in resource.data) || resource.data.isBanned == false)
         && request.resource.data.keys().hasOnly([
           'displayName',
@@ -176,13 +205,38 @@ service cloud.firestore {
         && validUsernameUpdate()
         && validViolationUpdate()
         && validPrivacySettings()
-        && request.resource.data.updatedAt is timestamp;
+        && request.resource.data.updatedAt is timestamp);
 
       allow delete: if false;
 
       match /private/{documentId} {
         allow read, write: if isOwnProfile(userId);
       }
+    }
+
+    match /bannedUsers/{userId} {
+      function validBanRecord() {
+        return request.resource.data.keys().hasOnly(['uid', 'bannedAt'])
+          && request.resource.data.keys().hasAll(['uid', 'bannedAt'])
+          && request.resource.data.uid == userId
+          && request.resource.data.bannedAt is timestamp;
+      }
+
+      allow read: if true;
+      allow create: if validBanRecord()
+        && (
+          isAdmin()
+          || (
+            isGoogleUser()
+            && request.auth.uid == userId
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.isBanned == true
+            && getAfter(/databases/$(database)/documents/users/$(userId)).data.violationCount == 5
+          )
+        );
+      allow update: if isAdmin()
+        && validBanRecord()
+        && request.resource.data.uid == resource.data.uid;
+      allow delete: if isAdmin() && resource.data.uid == userId;
     }
 
     match /posts/{postId} {
@@ -210,7 +264,7 @@ service cloud.firestore {
       }
 
       allow read: if true;
-      allow create: if request.auth != null
+      allow create: if isActiveGoogleUser()
         && (
           'authorUid' in request.resource.data
           || 'userId' in request.resource.data
@@ -221,6 +275,7 @@ service cloud.firestore {
           || request.resource.data.userId == request.auth.uid);
 
       allow update: if isOwnHiddenByUpdate()
+        || isAdmin()
         || (isPostOwner()
         && (
           'authorUid' in request.resource.data
@@ -233,7 +288,7 @@ service cloud.firestore {
         && (!('hidden' in request.resource.data)
           || request.resource.data.hidden is bool));
 
-      allow delete: if isPostOwner();
+      allow delete: if isPostOwner() || isAdmin();
 
       match /likes/{userId} {
         allow read: if true;

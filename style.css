@@ -873,6 +873,29 @@ p {
   margin-top: 48px;
 }
 
+.admin-member-panel {
+  margin-top: 32px;
+}
+
+.admin-member-panel h2 {
+  margin-top: 0;
+  color: var(--clay-dark);
+}
+
+.admin-member-panel > p {
+  color: var(--muted);
+}
+
+.admin-member-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.admin-member-row p {
+  overflow-wrap: anywhere;
+}
+
 /* Tiêu đề và danh sách bài viết đã đăng */
 .posts-heading {
   display: flex;
@@ -948,6 +971,22 @@ p {
 
 .delete-button:hover {
   background: #fbefec;
+}
+
+.edit-post-button {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid #d5c9b8;
+  border-radius: 3px;
+  background: transparent;
+  color: var(--clay-dark);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.edit-post-button:hover {
+  background: #f8f2e9;
 }
 
 .hide-post-button {
