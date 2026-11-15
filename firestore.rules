@@ -1,0 +1,317 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isGoogleUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    function isOwnProfile(userId) {
+      return isGoogleUser() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isGoogleUser()
+        && request.auth.token.email == 'vothanhtra0812@gmail.com';
+    }
+
+    function isActiveGoogleUser() {
+      return isGoogleUser()
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBanned == false;
+    }
+
+    match /users/{userId} {
+      function validPrivacySettings() {
+        return request.resource.data.privacySettings is map
+          && request.resource.data.privacySettings.keys().hasOnly([
+            'profileVisibility',
+            'hideLikedPosts'
+          ])
+          && request.resource.data.privacySettings.keys().hasAll([
+            'profileVisibility',
+            'hideLikedPosts'
+          ])
+          && request.resource.data.privacySettings.profileVisibility in ['public', 'private']
+          && request.resource.data.privacySettings.hideLikedPosts is bool;
+      }
+
+      function previousViolationCount() {
+        return 'violationCount' in resource.data
+          ? resource.data.violationCount
+          : 0;
+      }
+
+      function previousBannedStatus() {
+        return 'isBanned' in resource.data
+          && resource.data.isBanned == true;
+      }
+
+      function validUsernameUpdate() {
+        return (
+          request.resource.data.displayName == resource.data.displayName
+          && (
+            ('lastUsernameUpdate' in resource.data
+              && request.resource.data.lastUsernameUpdate == resource.data.lastUsernameUpdate)
+            || (!('lastUsernameUpdate' in resource.data)
+              && request.resource.data.lastUsernameUpdate == null)
+          )
+        ) || (
+          request.resource.data.displayName != resource.data.displayName
+          && (
+            !('lastUsernameUpdate' in resource.data)
+            || resource.data.lastUsernameUpdate == null
+            || request.time >= resource.data.lastUsernameUpdate + duration.value(7, 'd')
+          )
+          && request.resource.data.lastUsernameUpdate == request.time
+        );
+      }
+
+      function validViolationUpdate() {
+        return request.resource.data.violationCount >= previousViolationCount()
+          && request.resource.data.violationCount <= previousViolationCount() + 1
+          && (
+            (
+              request.resource.data.violationCount < 5
+              && request.resource.data.isBanned == false
+              && previousBannedStatus() == false
+            )
+            || (
+              request.resource.data.violationCount == 5
+              && request.resource.data.isBanned == true
+              && previousViolationCount() == 4
+              && previousBannedStatus() == false
+            )
+          );
+      }
+
+      allow read: if isOwnProfile(userId)
+        || !('privacySettings' in resource.data)
+        || resource.data.privacySettings.profileVisibility != 'private';
+
+      allow create: if isOwnProfile(userId)
+        && request.resource.data.keys().hasOnly([
+          'displayName',
+          'photoURL',
+          'avatarURL',
+          'avatarPath',
+          'postCount',
+          'violationCount',
+          'isBanned',
+          'lastUsernameUpdate',
+          'privacySettings',
+          'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'displayName',
+          'photoURL',
+          'avatarURL',
+          'avatarPath',
+          'postCount',
+          'violationCount',
+          'isBanned',
+          'lastUsernameUpdate',
+          'privacySettings',
+          'updatedAt'
+        ])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 60
+        && request.resource.data.photoURL is string
+        && request.resource.data.avatarURL is string
+        && request.resource.data.avatarPath is string
+        && request.resource.data.postCount is int
+        && request.resource.data.postCount >= 0
+        && (request.resource.data.postCount <= 15 || isAdmin())
+        && request.resource.data.violationCount is int
+        && request.resource.data.violationCount == 0
+        && request.resource.data.isBanned == false
+        && (
+          request.resource.data.lastUsernameUpdate == null
+          || request.resource.data.lastUsernameUpdate is timestamp
+        )
+        && validPrivacySettings()
+        && request.resource.data.updatedAt is timestamp;
+
+      allow update: if isOwnProfile(userId)
+        && (!('isBanned' in resource.data) || resource.data.isBanned == false)
+        && request.resource.data.keys().hasOnly([
+          'displayName',
+          'photoURL',
+          'avatarURL',
+          'avatarPath',
+          'postCount',
+          'violationCount',
+          'isBanned',
+          'lastUsernameUpdate',
+          'privacySettings',
+          'updatedAt'
+        ])
+        && request.resource.data.keys().hasAll([
+          'displayName',
+          'photoURL',
+          'avatarURL',
+          'avatarPath',
+          'postCount',
+          'violationCount',
+          'isBanned',
+          'lastUsernameUpdate',
+          'privacySettings',
+          'updatedAt'
+        ])
+        && request.resource.data.displayName is string
+        && request.resource.data.displayName.size() > 0
+        && request.resource.data.displayName.size() <= 60
+        && request.resource.data.photoURL is string
+        && request.resource.data.avatarURL is string
+        && request.resource.data.avatarPath is string
+        && request.resource.data.postCount is int
+        && request.resource.data.postCount >= resource.data.postCount
+        && request.resource.data.postCount <= resource.data.postCount + 1
+        && (request.resource.data.postCount <= 15 || isAdmin())
+        && request.resource.data.violationCount is int
+        && request.resource.data.violationCount <= 5
+        && request.resource.data.isBanned is bool
+        && validUsernameUpdate()
+        && validViolationUpdate()
+        && validPrivacySettings()
+        && request.resource.data.updatedAt is timestamp;
+
+      allow delete: if false;
+
+      match /private/{documentId} {
+        allow read, write: if isOwnProfile(userId);
+      }
+    }
+
+    match /posts/{postId} {
+      allow read: if true;
+
+      allow create: if isActiveGoogleUser()
+        && request.resource.data.keys().hasOnly([
+          'title',
+          'category',
+          'content',
+          'createdAt',
+          'userId',
+          'authorName',
+          'authorPhotoURL',
+          'attachments'
+        ])
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 160
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.category in [
+          'tradition',
+          'food',
+          'instruments',
+          'clothing'
+        ]
+        && request.resource.data.authorName is string
+        && request.resource.data.authorPhotoURL is string
+        && request.resource.data.createdAt is timestamp
+        && request.resource.data.attachments is list
+        && request.resource.data.attachments.size() <= 20
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.postCount
+          == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.postCount + 1
+        && (
+          getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.postCount <= 15
+          || isAdmin()
+        )
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.isBanned == false;
+
+      allow update: if isActiveGoogleUser()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == resource.data.userId
+        && request.resource.data.createdAt == resource.data.createdAt
+        && request.resource.data.keys().hasOnly([
+          'title',
+          'category',
+          'content',
+          'createdAt',
+          'userId',
+          'authorName',
+          'authorPhotoURL',
+          'attachments'
+        ])
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0
+        && request.resource.data.title.size() <= 160
+        && request.resource.data.category in [
+          'tradition',
+          'food',
+          'instruments',
+          'clothing'
+        ]
+        && request.resource.data.content is string
+        && request.resource.data.content.size() > 0
+        && request.resource.data.authorName is string
+        && request.resource.data.authorPhotoURL is string
+        && request.resource.data.attachments is list
+        && request.resource.data.attachments.size() <= 20;
+      allow delete: if isActiveGoogleUser()
+        && resource.data.userId == request.auth.uid;
+
+      match /likes/{userId} {
+        allow read: if true;
+        allow create: if isActiveGoogleUser()
+          && request.auth.uid == userId
+          && request.resource.data.keys().hasOnly([
+            'userId',
+            'displayName',
+            'photoURL',
+            'createdAt'
+          ])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.displayName is string
+          && request.resource.data.photoURL is string
+          && request.resource.data.createdAt is timestamp;
+        allow update: if false;
+        allow delete: if isActiveGoogleUser()
+          && request.auth.uid == userId
+          && resource.data.userId == request.auth.uid;
+      }
+
+      match /comments/{commentId} {
+        allow read: if true;
+        allow create: if isActiveGoogleUser()
+          && request.resource.data.keys().hasOnly([
+            'userId',
+            'authorName',
+            'authorPhotoURL',
+            'content',
+            'createdAt'
+          ])
+          && request.resource.data.userId == request.auth.uid
+          && request.resource.data.authorName is string
+          && request.resource.data.authorPhotoURL is string
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0
+          && request.resource.data.content.size() <= 1000
+          && request.resource.data.createdAt is timestamp;
+        allow update: if isActiveGoogleUser()
+          && resource.data.userId == request.auth.uid
+          && request.resource.data.userId == resource.data.userId
+          && request.resource.data.createdAt == resource.data.createdAt
+          && request.resource.data.keys().hasOnly([
+            'userId',
+            'authorName',
+            'authorPhotoURL',
+            'content',
+            'createdAt'
+          ])
+          && request.resource.data.authorName is string
+          && request.resource.data.authorPhotoURL is string
+          && request.resource.data.content is string
+          && request.resource.data.content.size() > 0
+          && request.resource.data.content.size() <= 1000;
+        allow delete: if isActiveGoogleUser()
+          && resource.data.userId == request.auth.uid;
+      }
+    }
+  }
+}

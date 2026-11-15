@@ -1,0 +1,37 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isGoogleUser() {
+      return request.auth != null
+        && request.auth.token.firebase.sign_in_provider == 'google.com';
+    }
+
+    match /posts/{userId}/{postId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isGoogleUser()
+        && request.auth.uid == userId
+        && (
+          (request.resource.contentType.matches('image/.*')
+            && request.resource.size <= 5242880)
+          || (request.resource.contentType.matches('audio/.*')
+            && request.resource.size <= 10485760)
+          || (request.resource.contentType.matches('video/.*')
+            && request.resource.size <= 20971520)
+        );
+      allow delete: if isGoogleUser()
+        && request.auth.uid == userId;
+    }
+
+    match /avatars/{userId}/{fileName} {
+      allow read: if true;
+      allow create, update: if isGoogleUser()
+        && request.auth.uid == userId
+        && fileName == 'avatar'
+        && request.resource.contentType.matches('image/.*')
+        && request.resource.size < 2097152;
+      allow delete: if isGoogleUser()
+        && request.auth.uid == userId;
+    }
+  }
+}
