@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#762d27">
   <meta name="description" content="Chia sẻ và lưu giữ câu chuyện, hình ảnh, âm thanh về di sản Raglai.">
-  <title>Câu chuyện di sản Raglai | Chuyên trang văn hóa</title>
+  <title>Văn hóa Raglai Bắc Khánh Vĩnh | Chuyên trang văn hóa</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;600;700&amp;family=Roboto:wght@400;500;700&amp;display=swap" rel="stylesheet">
@@ -15,11 +15,11 @@
   <!-- Header thương hiệu: logo và thông điệp được căn giữa theo trục dọc -->
   <header class="site-header">
     <div class="container header-content">
-      <a class="brand" id="home-link" href="#posts-title" aria-label="Di sản Raglai - Hiển thị tất cả bài viết">
+      <a class="brand" id="home-link" href="#posts-title" aria-label="Văn hóa Raglai Bắc Khánh Vĩnh - Hiển thị tất cả bài viết">
         <span class="brand-mark" aria-hidden="true"><span>R</span></span>
         <span>
-          <span class="brand-kicker">Chuyên trang văn hóa</span>
-          <span class="brand-name">DI SẢN RAGLAI</span>
+          <span class="brand-kicker">Không gian bảo tồn &amp; Lan tỏa bản sắc</span>
+          <span class="brand-name">VĂN HÓA RAGLAI</span>
           <span class="brand-place">BẮC KHÁNH VĨNH</span>
         </span>
       </a>
@@ -30,23 +30,33 @@
   <!-- Navbar chuyên mục: chọn một mục để lọc bài viết theo chuyên mục đó -->
   <nav class="category-nav" aria-label="Chuyên mục văn hóa">
     <div class="container category-nav-list">
-      <a href="#posts-title" data-category="tradition">Truyền thống văn hóa</a>
-      <a href="#posts-title" data-category="food">Ẩm thực</a>
+      <a href="#posts-title" data-category="">Trang chủ</a>
+      <a href="#posts-title" data-category="news">Tin tức sự kiện</a>
+      <a href="#posts-title" data-category="heritage">Em và di sản quê hương</a>
+      <a href="#posts-title" data-category="language">Ngôn ngữ dân tộc Raglai</a>
+      <a href="#posts-title" data-category="customs">Phong tục, lễ hội</a>
       <a href="#posts-title" data-category="instruments">Nhạc cụ truyền thống</a>
-      <a href="#posts-title" data-category="clothing">Đồng phục truyền thống</a>
+      <a href="#posts-title" data-category="clothing">Trang phục dân tộc</a>
+      <a href="#posts-title" data-category="food">Ẩm thực</a>
+      <a href="#posts-title" data-category="folk-knowledge">Tri thức dân gian</a>
+      <a href="#posts-title" data-category="other-ethnicities">Các dân tộc khác</a>
+      <a href="#posts-title" data-category="literature">Trang, văn thơ</a>
+      <a href="#posts-title" data-category="faq">Câu hỏi thường gặp</a>
     </div>
   </nav>
 
-  <!-- Hero mở đầu: ảnh SVG minh họa đi kèm; đổi src thành file ảnh Raglai của bạn khi cần -->
+  <!-- Hero mở đầu -->
   <section class="hero-banner container" aria-labelledby="hero-title">
     <img
       class="hero-image"
       src="1794754030752_977979496890427451_977979496890427451_6907d6d168f542bbbb358fc9211b317a - Copy.jpg"
-      alt="Minh họa phong cảnh miền núi; có thể thay bằng ảnh văn hóa hoặc con người Raglai"
+      alt="Cảnh quan núi rừng và văn hóa dân tộc Raglai Bắc Khánh Vĩnh"
     >
     <div class="hero-caption">
-      <p class="hero-kicker">VĂN HÓA · CON NGƯỜI · DI SẢN</p>
-      <h1 id="hero-title">Câu chuyện di sản Raglai</h1>
+      <div class="hero-copy">
+        <h1 id="hero-title">VĂN HÓA DI SẢN RAGLAI</h1>
+        <p class="hero-description">Hành trình lưu giữ bản sắc và ký ức đại ngàn</p>
+      </div>
     </div>
   </section>
 
@@ -77,6 +87,7 @@
         <div id="signed-in-profile" class="signed-in-profile" hidden>
           <img id="signed-in-avatar" class="signed-in-avatar" alt="" hidden>
           <span id="signed-in-name" class="signed-in-name"></span>
+          <span id="signed-in-admin-badge" class="admin-role-badge" hidden>Chủ Web</span>
         </div>
         <button id="open-own-profile" class="button button-outline" type="button" hidden>Trang cá nhân</button>
         <button id="sign-out" class="button button-outline" type="button" hidden>Đăng xuất</button>
@@ -91,10 +102,17 @@
         <label class="field-label" for="post-category">Chọn chuyên mục <span aria-hidden="true">*</span></label>
         <select id="post-category" name="category" required>
           <option value="" selected disabled>Chọn một chuyên mục</option>
-          <option value="tradition">Truyền thống văn hóa</option>
-          <option value="food">Ẩm thực</option>
+          <option value="news">Tin tức sự kiện</option>
+          <option value="heritage">Em và di sản quê hương</option>
+          <option value="language">Ngôn ngữ dân tộc Raglai</option>
+          <option value="customs">Phong tục, lễ hội</option>
           <option value="instruments">Nhạc cụ truyền thống</option>
-          <option value="clothing">Đồng phục truyền thống</option>
+          <option value="clothing">Trang phục dân tộc</option>
+          <option value="food">Ẩm thực</option>
+          <option value="folk-knowledge">Tri thức dân gian</option>
+          <option value="other-ethnicities">Các dân tộc khác</option>
+          <option value="literature">Trang, văn thơ</option>
+          <option value="faq">Câu hỏi thường gặp</option>
         </select>
 
         <label class="field-label" for="post-content">Nội dung <span aria-hidden="true">*</span></label>
@@ -148,10 +166,13 @@
         Trang cá nhân này đang ở chế độ riêng tư
       </p>
       <div id="profile-page-content" hidden>
-        <div class="profile-summarzy">
+        <div class="profile-summary">
           <img id="profile-page-avatar" class="profile-page-avatar" alt="" hidden>
           <div>
-            <h3 id="profile-page-name"></h3>
+            <div class="profile-page-name-row">
+              <h3 id="profile-page-name"></h3>
+              <span id="profile-admin-badge" class="admin-role-badge" hidden>Chủ Web</span>
+            </div>
             <p id="profile-page-email" class="profile-page-email"></p>
           </div>
         </div>
@@ -226,7 +247,7 @@
   <!-- Chân trang -->
   <footer class="site-footer">
     <div class="container footer-content">
-      <span class="footer-brand">DI SẢN RAGLAI <small>BẮC KHÁNH VĨNH</small></span>
+      <span class="footer-brand">VĂN HÓA RAGLAI <small>BẮC KHÁNH VĨNH</small></span>
       <p>Gìn giữ bản sắc · Kết nối thế hệ · Lan tỏa di sản</p>
     </div>
   </footer>

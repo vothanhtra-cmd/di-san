@@ -53,6 +53,7 @@ const ADMIN_EMAILS = [
 const MAX_VIOLATIONS = 5;
 const USERNAME_CHANGE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_ATTACHMENTS_PER_POST = 20;
+const ADMIN_AVATAR_URL = "./admin-avatar.svg";
 const BLOCKED_TERMS = [
   "địt", "đéo", "đụ", "cặc", "lồn", "buồi", "đĩ", "đồ ngu", "thằng ngu",
   "con ngu", "đồ chó", "đồ khốn", "đồ súc vật", "mất dạy", "chết tiệt",
@@ -60,10 +61,21 @@ const BLOCKED_TERMS = [
   "tự tử", "ma túy", "khủng bố", "đánh bom", "bạo lực", "bắt nạt", "kỳ thị"
 ];
 const CATEGORIES = {
-  tradition: "Truyền thống văn hóa",
-  food: "Ẩm thực",
+  news: "Tin tức sự kiện",
+  heritage: "Em và di sản quê hương",
+  language: "Ngôn ngữ dân tộc Raglai",
+  customs: "Phong tục, lễ hội",
+  tradition: "Phong tục, lễ hội",
   instruments: "Nhạc cụ truyền thống",
-  clothing: "Đồng phục truyền thống"
+  clothing: "Trang phục dân tộc",
+  food: "Ẩm thực",
+  "folk-knowledge": "Tri thức dân gian",
+  "other-ethnicities": "Các dân tộc khác",
+  literature: "Trang, văn thơ",
+  faq: "Câu hỏi thường gặp"
+};
+const CATEGORY_ALIASES = {
+  tradition: "customs"
 };
 
 const form = document.getElementById("post-form");
@@ -83,6 +95,7 @@ const signOutButton = document.getElementById("sign-out");
 const signedInProfile = document.getElementById("signed-in-profile");
 const signedInAvatar = document.getElementById("signed-in-avatar");
 const signedInName = document.getElementById("signed-in-name");
+const signedInAdminBadge = document.getElementById("signed-in-admin-badge");
 const openOwnProfileButton = document.getElementById("open-own-profile");
 const accountBanNotice = document.getElementById("account-ban-notice");
 const memberTools = document.getElementById("member-tools");
@@ -109,6 +122,7 @@ const privateProfileMessage = document.getElementById("private-profile-message")
 const profilePageContent = document.getElementById("profile-page-content");
 const profilePageAvatar = document.getElementById("profile-page-avatar");
 const profilePageName = document.getElementById("profile-page-name");
+const profileAdminBadge = document.getElementById("profile-admin-badge");
 const profilePageEmail = document.getElementById("profile-page-email");
 const privacySettingsForm = document.getElementById("privacy-settings-form");
 const profileVisibilityInput = document.getElementById("profile-visibility");
@@ -130,7 +144,7 @@ const adminMemberTitle = document.createElement("h2");
 adminMemberTitle.textContent = "Quản lý thành viên";
 const adminMemberDescription = document.createElement("p");
 adminMemberDescription.textContent =
-  "Khóa tài khoản sẽ chặn đăng bài và ẩn toàn bộ bài viết của thành viên.";
+  "Khóa tài khoản sẽ chặn đăng bài và ẩn bài viết; mở khóa sẽ khôi phục quyền đăng và hiển thị.";
 const adminMemberStatus = document.createElement("p");
 adminMemberStatus.className = "form-status";
 adminMemberStatus.setAttribute("role", "status");
@@ -196,6 +210,11 @@ function setAdminMemberStatus(message, isError) {
 
 function renderAdminMembers(members) {
   adminMemberList.replaceChildren();
+  if (!isAdminUser(auth && auth.currentUser)) {
+    adminMemberPanel.hidden = true;
+    return;
+  }
+  adminMemberPanel.hidden = false;
   if (members.length === 0) {
     const empty = document.createElement("p");
     empty.className = "profile-muted";
@@ -213,21 +232,31 @@ function renderAdminMembers(members) {
     const details = document.createElement("div");
     details.className = "profile-list-item-text";
     const name = document.createElement("h3");
-    name.textContent = member.displayName || "Thành viên";
+    const isCurrentAdmin = Boolean(currentUser
+      && member.uid === currentUser.uid
+      && isAdminUser(currentUser));
+    name.textContent = isCurrentAdmin ? "Admin" : member.displayName || "Thành viên";
+    if (isCurrentAdmin) {
+      const ownerBadge = document.createElement("span");
+      ownerBadge.className = "admin-role-badge";
+      ownerBadge.textContent = "Chủ Web";
+      name.appendChild(ownerBadge);
+    }
     const status = document.createElement("p");
-    status.textContent = (member.isBanned ? "Đang bị khóa" : "Đang hoạt động")
+    status.textContent = (member.isBanned ? "Đã bị khóa" : "Đang hoạt động")
       + " · Vi phạm: " + member.violationCount + "/" + MAX_VIOLATIONS
       + " · UID: " + member.uid;
     details.append(name, status);
     row.appendChild(details);
 
     const button = document.createElement("button");
-    button.className = "button button-outline";
+    button.className = member.isBanned
+      ? "button button-admin-unlock"
+      : "button button-admin-lock";
     button.type = "button";
-    button.textContent = member.isBanned ? "Mở khóa" : "Khóa tài khoản";
-    button.disabled = Boolean(currentUser && member.uid === currentUser.uid);
+    button.textContent = member.isBanned ? "Mở khóa tài khoản" : "Khóa tài khoản";
     button.addEventListener("click", function () {
-      if (member.uid === (currentUser && currentUser.uid)) {
+      if (!isAdminUser(auth && auth.currentUser)) {
         return;
       }
       const nextBannedState = !member.isBanned;
@@ -327,7 +356,9 @@ function subscribeToAdminMembers(user) {
 }
 
 async function setMemberBanned(userId, shouldBeBanned, button) {
-  if (!isAdminUser(auth.currentUser) || userId === auth.currentUser.uid) {
+  const adminUser = auth && auth.currentUser;
+  if (!isAdminUser(adminUser)
+    || !userId) {
     return;
   }
 
@@ -428,11 +459,16 @@ function updateAuthControls(user) {
   signedInName.textContent = signedIn
     ? (isAdmin ? "Admin" : getCurrentDisplayName())
     : "";
+  signedInProfile.classList.toggle("is-admin", signedIn && isAdmin);
+  signedInAdminBadge.hidden = !signedIn || !isAdmin;
   const profile = signedIn ? profileCache.get(currentUser.uid) || {} : {};
-  const avatarURL = profile.avatarURL || profile.photoURL
-    || (signedIn && currentUser.photoURL)
-    || "";
+  const avatarURL = isAdmin
+    ? ADMIN_AVATAR_URL
+    : profile.avatarURL || profile.photoURL
+      || (signedIn && currentUser.photoURL)
+      || "";
   signedInAvatar.hidden = !avatarURL;
+  signedInAvatar.classList.toggle("admin-avatar", signedIn && isAdmin);
   if (avatarURL) {
     signedInAvatar.src = avatarURL;
   } else {
@@ -660,11 +696,15 @@ function containsBlockedLanguage(text) {
 
 function getPublicProfile(userId, fallbackName, fallbackPhotoURL) {
   const profile = profileCache.get(userId) || {};
+  const isAdmin = fallbackName === "Admin";
   return {
-    name: fallbackName === "Admin"
+    isAdmin: isAdmin,
+    name: isAdmin
       ? "Admin"
       : profile.displayName || fallbackName || "Thành viên",
-    avatarURL: profile.avatarURL || profile.photoURL || fallbackPhotoURL || ""
+    avatarURL: isAdmin
+      ? ADMIN_AVATAR_URL
+      : profile.avatarURL || profile.photoURL || fallbackPhotoURL || ""
   };
 }
 
@@ -682,6 +722,7 @@ function createAuthorBadge(userId, fallbackName, fallbackPhotoURL) {
   if (profile.avatarURL) {
     const avatar = document.createElement("img");
     avatar.className = "person-avatar";
+    avatar.classList.toggle("admin-avatar", profile.isAdmin);
     avatar.src = profile.avatarURL;
     avatar.alt = "";
     avatar.loading = "lazy";
@@ -691,6 +732,13 @@ function createAuthorBadge(userId, fallbackName, fallbackPhotoURL) {
   const name = document.createElement("span");
   name.textContent = profile.name;
   badge.appendChild(name);
+  if (profile.isAdmin) {
+    const ownerBadge = document.createElement("span");
+    ownerBadge.className = "admin-role-badge";
+    ownerBadge.textContent = "Chủ Web";
+    badge.appendChild(ownerBadge);
+    badge.classList.add("admin-person-badge");
+  }
   return badge;
 }
 
@@ -814,7 +862,7 @@ async function toggleLike(post, button) {
   }
 }
 
-async function addComment(post, content, button, statusTarget) {
+async function addComment(post, authorName, content, button, statusTarget) {
   if (!currentUser) {
     showStatus("Hãy đăng nhập bằng Google để bình luận.", true);
     return false;
@@ -827,18 +875,28 @@ async function addComment(post, content, button, statusTarget) {
     showStatus("Tài khoản của bạn đã bị khóa vĩnh viễn.", true);
     return false;
   }
+  const name = authorName.trim();
   const text = content.trim();
-  if (!text) {
+  if (!name || name.length > 60) {
+    statusTarget.textContent = "Tên hiển thị phải có từ 1 đến 60 ký tự.";
+    statusTarget.classList.add("is-error");
+    statusTarget.classList.remove("is-success");
     return false;
   }
-  if (containsBlockedLanguage(text)) {
+  if (!text) {
+    statusTarget.textContent = "Vui lòng nhập nội dung bình luận.";
+    statusTarget.classList.add("is-error");
+    statusTarget.classList.remove("is-success");
+    return false;
+  }
+  if (containsBlockedLanguage(name) || containsBlockedLanguage(text)) {
     return rejectInappropriateContent(statusTarget);
   }
   button.disabled = true;
   try {
     await setDoc(doc(collection(db, "posts", post.id, "comments")), {
       userId: currentUser.uid,
-      authorName: getCurrentDisplayName(),
+      authorName: name,
       authorPhotoURL: currentUser.photoURL || "",
       content: text,
       createdAt: serverTimestamp()
@@ -855,7 +913,7 @@ async function addComment(post, content, button, statusTarget) {
 
 function updateCategoryNavigation() {
   categoryLinks.forEach(function (link) {
-    if (link.dataset.category === currentCategory) {
+    if ((link.dataset.category || null) === currentCategory) {
       link.setAttribute("aria-current", "page");
     } else {
       link.removeAttribute("aria-current");
@@ -886,7 +944,8 @@ function renderPosts() {
         && (bannedUserIds.has(post.userId) || authorProfile.isBanned === true);
       return !hiddenByCurrentUser
         && !authorIsBanned
-        && (!currentCategory || post.category === currentCategory);
+        && (!currentCategory
+          || (CATEGORY_ALIASES[post.category] || post.category) === currentCategory);
     })
     .sort(function (first, second) {
       return second.createdAt - first.createdAt;
@@ -1050,6 +1109,15 @@ function renderPosts() {
 
     const commentForm = document.createElement("form");
     commentForm.className = "comment-form";
+    const commentAuthorInput = document.createElement("input");
+    commentAuthorInput.className = "comment-name-input";
+    commentAuthorInput.type = "text";
+    commentAuthorInput.maxLength = 60;
+    commentAuthorInput.required = true;
+    commentAuthorInput.value = currentUser ? getCurrentDisplayName() : "";
+    commentAuthorInput.placeholder = currentUser ? "Tên hiển thị" : "Đăng nhập để bình luận.";
+    commentAuthorInput.setAttribute("aria-label", "Tên hiển thị bình luận");
+    commentAuthorInput.disabled = !currentUser || !profileReady || currentUserBanned;
     const commentInput = document.createElement("textarea");
     commentInput.maxLength = 1000;
     commentInput.rows = 2;
@@ -1061,14 +1129,20 @@ function renderPosts() {
     commentButton.type = "submit";
     commentButton.textContent = "Gửi bình luận";
     commentButton.disabled = !currentUser || !profileReady || currentUserBanned;
-    commentForm.append(commentInput, commentButton);
+    commentForm.append(commentAuthorInput, commentInput, commentButton);
     const commentStatus = document.createElement("p");
     commentStatus.className = "form-status";
     commentStatus.setAttribute("role", "status");
     commentStatus.setAttribute("aria-live", "polite");
     commentForm.addEventListener("submit", function (event) {
       event.preventDefault();
-      addComment(post, commentInput.value, commentButton, commentStatus).then(function (saved) {
+      addComment(
+        post,
+        commentAuthorInput.value,
+        commentInput.value,
+        commentButton,
+        commentStatus
+      ).then(function (saved) {
         if (saved) {
           commentInput.value = "";
         }
@@ -1306,9 +1380,14 @@ async function openProfile(userId) {
 
     profileCache.set(userId, profile);
     profilePageContent.hidden = false;
-    profilePageName.textContent = profile.displayName || "Thành viên";
-    const avatarURL = profile.avatarURL || profile.photoURL || "";
+    const viewingAdmin = activeProfileIsOwner && isAdminUser(currentUser);
+    profilePageName.textContent = viewingAdmin ? "Admin" : profile.displayName || "Thành viên";
+    profileAdminBadge.hidden = !viewingAdmin;
+    const avatarURL = viewingAdmin
+      ? ADMIN_AVATAR_URL
+      : profile.avatarURL || profile.photoURL || "";
     profilePageAvatar.hidden = !avatarURL;
+    profilePageAvatar.classList.toggle("admin-avatar", viewingAdmin);
     if (avatarURL) {
       profilePageAvatar.src = avatarURL;
     } else {
@@ -2180,7 +2259,7 @@ async function editPost(post, button) {
     return;
   }
   const category = window.prompt(
-    "Mã chuyên mục (tradition, food, instruments, clothing):",
+    "Mã chuyên mục (news, heritage, language, customs, instruments, clothing, food, folk-knowledge, other-ethnicities, literature, faq):",
     post.category
   );
   if (category === null) {
@@ -2255,7 +2334,7 @@ async function hidePost(post, button) {
 // Lọc bài viết khi chọn chuyên mục trên thanh điều hướng.
 categoryLinks.forEach(function (link) {
   link.addEventListener("click", function () {
-    currentCategory = link.dataset.category;
+    currentCategory = link.dataset.category || null;
     updateCategoryNavigation();
     renderPosts();
   });
@@ -2267,6 +2346,7 @@ homeLink.addEventListener("click", function () {
   updateCategoryNavigation();
   renderPosts();
 });
+updateCategoryNavigation();
 
 [imageInput, videoInput].forEach(function (input) {
   input.addEventListener("change", renderPreview);
