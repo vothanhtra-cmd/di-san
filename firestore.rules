@@ -52,6 +52,15 @@ service cloud.firestore {
           && resource.data.isBanned == true;
       }
 
+      function isAdminAccount(targetUserId) {
+        let authMetadataPath = /databases/$(database)/documents/users/$(targetUserId)/private/auth;
+        return exists(authMetadataPath)
+          && get(authMetadataPath).data.email in [
+            'vothanhtra0812@gmail.com',
+            'nguyenthuong250112011@gmail.com'
+          ];
+      }
+
       function validUsernameUpdate() {
         return (
           request.resource.data.displayName == resource.data.displayName
@@ -95,6 +104,7 @@ service cloud.firestore {
           ? resource.data.violationCount
           : 0;
         return isAdmin()
+          && !isAdminAccount(userId)
           && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
             'isBanned',
             'violationCount',
@@ -210,8 +220,137 @@ service cloud.firestore {
       allow delete: if false;
 
       match /private/{documentId} {
-        allow read, write: if isOwnProfile(userId);
+        allow read: if isOwnProfile(userId);
+        allow write: if isOwnProfile(userId) && documentId != 'challenge';
       }
+
+      match /private/challenge/history/{historyId} {
+        function validHistoryEntry() {
+          return request.resource.data.keys().hasOnly([
+              'completedAt',
+              'correctCount',
+              'totalQuestions',
+              'score'
+            ])
+            && request.resource.data.keys().hasAll([
+              'completedAt',
+              'correctCount',
+              'totalQuestions',
+              'score'
+            ])
+            && request.resource.data.completedAt == request.time
+            && request.resource.data.correctCount is int
+            && request.resource.data.correctCount >= 0
+            && request.resource.data.totalQuestions is int
+            && request.resource.data.totalQuestions > 0
+            && request.resource.data.totalQuestions <= 1000
+            && request.resource.data.correctCount <= request.resource.data.totalQuestions
+            && request.resource.data.score is int
+            && request.resource.data.score >= 0
+            && request.resource.data.score <= request.resource.data.correctCount;
+        }
+
+        allow read: if isOwnProfile(userId);
+        allow create: if isOwnProfile(userId)
+          && !isAdmin()
+          && validHistoryEntry();
+        allow update, delete: if false;
+      }
+
+      match /private/challenge {
+        function validChallengeData() {
+          return request.resource.data.keys().hasOnly([
+              'score',
+              'correctQuestionIds',
+              'giftNotified',
+              'updatedAt'
+            ])
+            && request.resource.data.keys().hasAll([
+              'score',
+              'correctQuestionIds',
+              'giftNotified',
+              'updatedAt'
+            ])
+            && request.resource.data.score is int
+            && request.resource.data.score >= 0
+            && request.resource.data.correctQuestionIds is list
+            && request.resource.data.correctQuestionIds.size() <= 1000
+            && request.resource.data.correctQuestionIds.toSet().size()
+              == request.resource.data.correctQuestionIds.size()
+            && request.resource.data.giftNotified is bool
+            && request.resource.data.updatedAt == request.time;
+        }
+
+        function previousQuestionIds() {
+          return 'correctQuestionIds' in resource.data
+            ? resource.data.correctQuestionIds
+            : [];
+        }
+
+        function previousChallengeScore() {
+          return 'score' in resource.data ? resource.data.score : 0;
+        }
+
+        function previousGiftNotified() {
+          return 'giftNotified' in resource.data
+            && resource.data.giftNotified == true;
+        }
+
+        allow read: if isOwnProfile(userId);
+        allow create: if isOwnProfile(userId)
+          && !isAdmin()
+          && validChallengeData()
+          && request.resource.data.score <= 1000
+          && request.resource.data.score == request.resource.data.correctQuestionIds.size()
+          && request.resource.data.giftNotified == false;
+        allow update: if isOwnProfile(userId)
+          && !isAdmin()
+          && validChallengeData()
+          && request.resource.data.correctQuestionIds.hasAll(previousQuestionIds())
+          && request.resource.data.score == previousChallengeScore()
+            + request.resource.data.correctQuestionIds.size()
+            - previousQuestionIds().size()
+          && (!previousGiftNotified() || request.resource.data.giftNotified)
+          && (!request.resource.data.giftNotified || request.resource.data.score >= 500);
+        allow delete: if false;
+      }
+    }
+
+    match /gift_notifications/{notificationId} {
+      allow create: if isOwnProfile(request.resource.data.uid)
+        && !isAdmin()
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'userName',
+          'userEmail',
+          'score',
+          'reachedAt',
+          'status'
+        ])
+        && request.resource.data.keys().hasAll([
+          'uid',
+          'userName',
+          'userEmail',
+          'score',
+          'reachedAt',
+          'status'
+        ])
+        && request.resource.data.userName is string
+        && request.resource.data.userEmail is string
+        && request.resource.data.score is int
+        && request.resource.data.score >= 500
+        && request.resource.data.reachedAt == request.time
+        && request.resource.data.status == 'pending'
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/private/challenge).data.score
+          == request.resource.data.score
+        && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)/private/challenge).data.giftNotified
+          == true;
+      allow read: if isAdmin();
+      allow update: if isAdmin()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])
+        && resource.data.status == 'pending'
+        && request.resource.data.status == 'completed';
+      allow delete: if false;
     }
 
     match /bannedUsers/{userId} {

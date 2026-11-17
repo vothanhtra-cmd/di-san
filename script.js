@@ -11,6 +11,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
   orderBy,
   query,
@@ -77,6 +78,257 @@ const CATEGORIES = {
 const CATEGORY_ALIASES = {
   tradition: "customs"
 };
+const CHALLENGE_TARGET_SCORE = 500;
+const QUESTION_TIME_MS = 10000;
+const REACTION_DURATION_MS = 2000;
+const SKIP_REACTION_DURATION_MS = 2500;
+const QUIZ_DATA = [
+  {
+    id: "q01",
+    question: "Xã Bắc Khánh Vĩnh trực thuộc tỉnh nào của nước ta?",
+    options: ["Lâm Đồng", "Khánh Hòa", "Ninh Thuận", "Phú Yên"],
+    answer: 1
+  },
+  {
+    id: "q02",
+    question: "Theo số liệu thống kê hành chính mới nhất được cập nhật trong đề tài, xã Bắc Khánh Vĩnh có diện tích tự nhiên khoảng bao nhiêu?",
+    options: ["100,5 km²", "120,0 km²", "144,2 km²", "165,8 km²"],
+    answer: 2
+  },
+  {
+    id: "q03",
+    question: "Quy mô dân số của xã Bắc Khánh Vĩnh (tính đến năm 2025) là khoảng bao nhiêu người?",
+    options: ["5.400 người", "7.200 người", "9.199 người", "12.500 người"],
+    answer: 2
+  },
+  {
+    id: "q04",
+    question: "Mật độ dân số trung bình tại xã Bắc Khánh Vĩnh đạt mức bao nhiêu?",
+    options: ["45 người/km²", "64 người/km²", "85 người/km²", "110 người/km²"],
+    answer: 1
+  },
+  {
+    id: "q05",
+    question: "Xã Bắc Khánh Vĩnh được thành lập trên cơ sở sáp nhập những đơn vị hành chính cấp xã nào trước đây?",
+    options: [
+      "Xã Khánh Bình và Xã Khánh Đông",
+      "Xã Khánh Nam và Xã Khánh Thượng",
+      "Xã Khánh Hiệp và Xã Khánh Vĩnh",
+      "Xã Khánh Phú và Xã Khánh Trung"
+    ],
+    answer: 0
+  },
+  {
+    id: "q06",
+    question: "Trụ sở làm việc chính thức của UBND xã Bắc Khánh Vĩnh được đặt tại đâu?",
+    options: [
+      "Trụ sở UBND xã Khánh Đông cũ",
+      "Trụ sở UBND xã Khánh Bình cũ",
+      "Trung tâm văn hóa huyện Khánh Vĩnh",
+      "Nhà văn hóa thôn Suối Cau"
+    ],
+    answer: 1
+  },
+  {
+    id: "q07",
+    question: "Theo số liệu công bố, trên địa bàn xã có bao nhiêu dân tộc anh em cùng chung sống?",
+    options: ["5 dân tộc", "7 dân tộc", "9 dân tộc", "12 dân tộc"],
+    answer: 2
+  },
+  {
+    id: "q08",
+    question: "Đồng bào dân tộc nào đóng vai trò là cộng đồng bản địa cốt lõi, lâu đời tại địa bàn nghiên cứu?",
+    options: ["Dân tộc Ê Đê", "Dân tộc Raglai", "Dân tộc Tày", "Dân tộc Mường"],
+    answer: 1
+  },
+  {
+    id: "q09",
+    question: "Nhạc cụ truyền thống tiêu biểu nhất, gắn liền với sinh hoạt tín ngưỡng và lễ hội của người Raglai là gì?",
+    options: ["Cồng chiêng / Mã la", "Đàn T’rưng", "Sáo sậu", "Đàn K’lông pút"],
+    answer: 0
+  },
+  {
+    id: "q10",
+    question: "Loại đàn tre độc đáo nổi tiếng của đồng bào Raglai được ví như tiếng lòng của núi rừng là gì?",
+    options: ["Đàn bầu", "Đàn Chapi", "Đàn nhị", "Đàn tam thập lục"],
+    answer: 1
+  },
+  {
+    id: "q11",
+    question: "Lễ hội quan trọng nhất phản ánh tín ngưỡng nông nghiệp và lòng biết ơn thần linh của người Raglai là lễ gì?",
+    options: ["Lễ hội cồng chiêng", "Lễ ăn đầu lúa mới", "Lễ bỏ mả", "Lễ cúng bến nước"],
+    answer: 1
+  },
+  {
+    id: "q12",
+    question: "Trang phục truyền thống của phụ nữ Raglai thường có điểm nhấn đặc trưng nào?",
+    options: [
+      "Thêu hoa văn cườm màu sắc rực rỡ trên nền vải chàm đen",
+      "Váy lụa tơ tằm dài trắng",
+      "Áo dài thêu hoa sen",
+      "Váy thổ cẩm màu sáng rực rỡ"
+    ],
+    answer: 0
+  },
+  {
+    id: "q13",
+    question: "Ẩm thực truyền thống nổi tiếng của người Raglai nấu trong ống nứa tươi bao gồm món gì?",
+    options: ["Cơm lam và thịt nướng ống tre", "Phở khô Gia Lai", "Bánh chưng gù", "Cháo cá suối"],
+    answer: 0
+  },
+  {
+    id: "q14",
+    question: "Không gian sinh tồn chủ đạo của đồng bào Raglai ở Bắc Khánh Vĩnh gắn liền với địa hình nào?",
+    options: [
+      "Đồng bằng ven biển",
+      "Vùng đồi núi cao và thung lũng dọc các triền suối",
+      "Đảo và vùng ven biển",
+      "Vùng đất cát ven đầm phá"
+    ],
+    answer: 1
+  },
+  {
+    id: "q15",
+    question: "Theo tín ngưỡng truyền thống, người Raglai thờ vị thần tối cao nào bảo hộ cho con người và mùa màng?",
+    options: ["Thần Nước", "Thần Mặt Trời / Thần Xứ Sở (Yang)", "Thần Rừng Xanh", "Thần Lúa"],
+    answer: 1
+  },
+  {
+    id: "q16",
+    question: "Trong hệ thống quản ốc bản làng truyền thống của người Raglai, người có uy tín lớn nhất lo việc cúng tế và giải quyết tranh chấp là ai?",
+    options: ["Trưởng trạm y tế", "Già làng / Thầy cúng uy tín", "Bí thư chi bộ", "Chủ tịch xã"],
+    answer: 1
+  },
+  {
+    id: "q17",
+    question: "Hình thức hát dân ca đối đáp trữ tình rất phổ biến trong sinh hoạt văn hóa tinh thần của người Raglai gọi là gì?",
+    options: ["Hát ví giặm", "Hát Chặp / Hát đối đáp dân gian Raglai", "Hát quan họ", "Hát xoan"],
+    answer: 1
+  },
+  {
+    id: "q18",
+    question: "Các địa điểm lịch sử - kinh tế tiêu biểu nằm tại khu vực Khánh Bình (Bắc Khánh Vĩnh) bao gồm địa danh nào sau đây?",
+    options: [
+      "Gạch tuynen Hiệp Khánh, Cây Xăng Trầm Hương, Phòng khám đa khoa khu vực Khánh Bình",
+      "Chợ Bến Thành",
+      "Phố cổ Hội An",
+      "Cầu Rồng Đà Nẵng"
+    ],
+    answer: 0
+  },
+  {
+    id: "q19",
+    question: "Dự án trang web văn hóa mà bạn đang xây dựng và quản trị mang tên đầy đủ là gì?",
+    options: [
+      "Văn hóa các dân tộc Tây Nguyên",
+      "VĂN HÓA RAGLAI BẮC KHÁNH VĨNH",
+      "Du lịch sinh thái Khánh Vĩnh",
+      "Di sản văn hóa Khánh Hòa"
+    ],
+    answer: 1
+  },
+  {
+    id: "q20",
+    question: "Mục tiêu cốt lõi nhất của việc xây dựng chuyên trang “Văn hóa Raglai Bắc Khánh Vĩnh” là gì?",
+    options: [
+      "Kinh doanh thương mại điện tử",
+      "Gìn giữ ký ức, bảo tồn bản sắc và lan tỏa giá trị di sản văn hóa truyền thống",
+      "Đăng tin tức thời sự chính trị",
+      "Giải trí trực tuyến tổng hợp"
+    ],
+    answer: 1
+  }
+];
+const CORRECT_RESPONSE_LINES = [
+  "Bạn tài thật! Bạn đúng là người có tài!",
+  "Á chà chà, đỉnh của chóp! Bạn là nhứt!",
+  "Quá xuất sắc! Cứ đà này là rinh quà liền tay nha!",
+  "Trí tuệ thâm sâu! Xin bái phục bái phục!",
+  "Quá dữ dội luôn! Không ai địch nổi bạn rồi!",
+  "Đúng là hệ mặt trời! Quá đỉnh!",
+  "ĐỈNH CỦA CHÓP! Bạn bắt bài lẹ quá!",
+  "Á CHÀ CHÀ! QUÁ DỮ DỘI!",
+  "QUÁ XUẤT SẮC! CÂU NÀY KHÔNG LÀM KHÓ ĐƯỢC BẠN!",
+  "ĐỈNH CỦA CHÓP! XUẤT SẮC!",
+  "HUYỀN THOẠI LÀ ĐÂY!",
+  "ĐỈNH CỦA CHÓP! XUẤT SẮC NHƯ CỤ!",
+  "Á CHÀ CHÀ! QUÁ DỮ DỘI RỒI NHA!",
+  "HUYỀN THOẠI LÀ ĐÂY CHỨ ĐÂU!",
+  "TRÍ TUỆ THÂM SÂU - BÁI PHỤC BÁI PHỤC!",
+  "QUÁ ĐỈNH! HỆ MẶT TRỜI GỌI TÊN BẠN!",
+  "SIÊU NHÂN VĂN HÓA LÀ ĐÂY!"
+];
+const INCORRECT_RESPONSE_LINES = [
+  "Cố cứng tí nữa là đẻ được trứng rồi! Thôi không sao đâu, còn câu khác.",
+  "Bạn xui thôi, hoặc là bạn cần củng cố lại kiến thức vùng mình rồi đó!",
+  "Úi giời ơi, suýt thì đúng! Thử lại câu sau gỡ gạc nha.",
+  "Câu này hơi lắt léo hả? Không sao, vấp keo này ta bày keo khác!",
+  "Ối dồi ôi, gần đúng rồi nhưng mà... tiếc quá đi mất!",
+  "Ê câu này khó thật đấy, không trách bạn đâu!",
+  "ỐI DỒI ÔI, SUÝT ĐÚNG!",
+  "CỐ CỨNG TÍ NỮA LÀ ĐẺ TRỨNG!",
+  "TRẬT NHỊP RỒI! CÂU SAU GỠ GẠC NHA!",
+  "ỐI DỒI ÔI! SUÝT THÌ ĐÚNG RỒI ÔI LÀ ÔI!",
+  "VẤP KEO NÀY TA BÀY KEO KHÁC NHÉ!",
+  "CỐ CỨNG TÍ NỮA LÀ ĐẺ ĐƯỢC TRỨNG RỒI!",
+  "TIẾC QUÁ ĐI MẤT! THỬ LẠI CÂU SAU NHA!",
+  "Ê CÂU NÀY HƠI GẮT NHỈ, THÔI GỠ GẠC NÀO!",
+  "ỐI GIỜI ÔI, GẦN ĐÚNG RỒI NHƯNG MÀ... TRƯỢT VỎ CHUỐI!"
+];
+
+function createChallengeAnimatedMeme(emoji, caption, background, tilt) {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 220">'
+    + '<rect width="320" height="220" rx="18" fill="' + background + '"/>'
+    + '<g><animateTransform attributeName="transform" type="translate" '
+    + 'values="0 0;0 -9;0 0" dur=".55s" repeatCount="indefinite"/>'
+    + '<g><animateTransform attributeName="transform" type="rotate" '
+    + 'values="' + (-tilt) + ' 160 100;' + tilt + ' 160 100;' + (-tilt)
+    + ' 160 100" dur=".7s" repeatCount="indefinite"/>'
+    + '<text x="160" y="125" text-anchor="middle" font-size="104">'
+    + emoji + '</text></g></g>'
+    + '<text x="160" y="194" text-anchor="middle" fill="#55211e" '
+    + 'font-family="Arial,sans-serif" font-size="18" font-weight="700">'
+    + caption + '</text></svg>';
+  return {
+    src: "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+    alt: caption
+  };
+}
+
+const CHALLENGE_EXTRA_MEMES = {
+  celebrationDuck: createChallengeAnimatedMeme("🐥", "VỊT VÀNG QUẨY ĐU", "#fff2bc", 12),
+  celebrationRabbit: createChallengeAnimatedMeme("🐰", "THỎ BẢY MÀU ĂN MỪNG", "#fce4f2", 9),
+  frustratedCat: createChallengeAnimatedMeme("😿", "MÈO ÔM MẶT BẤT LỰC", "#e7e9f8", 8),
+  fallenDuck: createChallengeAnimatedMeme("🐥", "VỊT VÀNG NGÃ NGỬA", "#f8e3d8", 24),
+  confusedFace: createChallengeAnimatedMeme("😵‍💫❓", "ỦA, ĐÁP ÁN NÀO TA?", "#e4f2fb", 7)
+};
+
+const CHALLENGE_REACTION_MEMES = {
+  correct: [
+    { src: "https://media.giphy.com/media/26gspipWnu59srmM0/giphy.gif", alt: "Mèo vỗ tay phấn khích" },
+    { src: "https://media.giphy.com/media/xT5LMFZDsj0AKUDYTS/giphy.gif", alt: "Pháo hoa bùng nổ ăn mừng" },
+    { src: "https://media.giphy.com/media/3o7TKSjRrfIPjeiOkM/giphy.gif", alt: "Cún con nhảy múa vui vẻ" },
+    { src: "https://media.giphy.com/media/artj92V8o75VPL7AeQ/giphy.gif", alt: "Gấu trúc lắc lư ăn mừng" },
+    { src: "https://media.giphy.com/media/d2W7eZX5z62ziqdi/giphy.gif", alt: "Nhóm bạn cười và ôm nhau ăn mừng" },
+    { src: "https://media.giphy.com/media/3oriNScTbEzEVoR1Is/giphy.gif", alt: "Người nhện nhảy múa mừng chiến thắng" },
+    CHALLENGE_EXTRA_MEMES.celebrationDuck,
+    CHALLENGE_EXTRA_MEMES.celebrationRabbit
+  ],
+  incorrect: [
+    { src: "https://media.giphy.com/media/8L0Pky6C83SzkzU55a/giphy.gif", alt: "Biểu cảm ngơ ngác cười trừ" },
+    { src: "https://media.giphy.com/media/10rHZ6OMsglHxS/giphy.gif", alt: "Trượt vỏ chuối hài hước" },
+    { src: "https://media.giphy.com/media/9M5jK4GXmD5o1irGrF/giphy.gif", alt: "Gãi đầu suy nghĩ" },
+    { src: "https://media.giphy.com/media/3oEjI6SIIHBdRxXI40/giphy.gif", alt: "Biểu cảm ngớ ngẩn buồn cười" },
+    { src: "https://media.giphy.com/media/26ufcVAp3AiJJsrIs/giphy.gif", alt: "Cô bé mếu máo hài hước" },
+    CHALLENGE_EXTRA_MEMES.frustratedCat,
+    CHALLENGE_EXTRA_MEMES.fallenDuck
+  ],
+  skip: [
+    { src: "https://media.giphy.com/media/9M5jK4GXmD5o1irGrF/giphy.gif", alt: "Bó tay, gãi đầu không biết đáp án" },
+    { src: "https://media.giphy.com/media/8L0Pky6C83SzkzU55a/giphy.gif", alt: "Ngơ ngác không biết trả lời" },
+    CHALLENGE_EXTRA_MEMES.confusedFace
+  ]
+};
 
 const form = document.getElementById("post-form");
 const titleInput = document.getElementById("post-title");
@@ -136,12 +388,62 @@ const profileLikesList = document.getElementById("profile-likes-list");
 const profileCommentsList = document.getElementById("profile-comments-list");
 const homeLink = document.getElementById("home-link");
 const categoryLinks = Array.from(document.querySelectorAll(".category-nav [data-category]"));
+const startChallengeButton = document.getElementById("start-challenge");
+const challengeDialog = document.getElementById("challenge-dialog");
+const challengeScoreValue = document.getElementById("challenge-score-value");
+const challengeScoreLabel = document.getElementById("challenge-score-label");
+const challengeAdminTestNotice = document.getElementById("challenge-admin-test-notice");
+const challengePlayArea = document.getElementById("challenge-play-area");
+const challengeSummary = document.getElementById("challenge-summary");
+const challengeSummaryTitle = document.getElementById("challenge-summary-title");
+const challengeSummaryResult = document.getElementById("challenge-summary-result");
+const challengeSummaryScore = document.getElementById("challenge-summary-score");
+const challengeSummaryStatus = document.getElementById("challenge-summary-status");
+const challengeSummaryHomeButton = document.getElementById("challenge-summary-home");
+const challengeHistoryButton = document.getElementById("challenge-history-button");
+const challengeHistoryPanel = document.getElementById("challenge-history-panel");
+const challengeHistoryStatus = document.getElementById("challenge-history-status");
+const challengeHistoryList = document.getElementById("challenge-history-list");
+const challengeProgressInfo = document.getElementById("challenge-progress-info");
+const challengeTimer = document.querySelector(".challenge-timer");
+const challengeTimerBar = document.getElementById("challenge-timer-bar");
+const challengeQuestion = document.getElementById("challenge-question");
+const challengeOptions = document.getElementById("challenge-options");
+const challengeSkipButton = document.getElementById("challenge-skip");
+const challengeFeedback = document.getElementById("challenge-feedback");
+const challengeIntegrityWarning = document.getElementById("challenge-integrity-warning");
+const challengeReaction = document.getElementById("challenge-reaction");
+const challengeReactionImage = document.getElementById("challenge-reaction-image");
+const challengeReactionError = document.getElementById("challenge-reaction-error");
+const challengeReactionCaption = document.getElementById("challenge-reaction-caption");
+const challengeRoundScore = document.getElementById("challenge-round-score");
+const closeChallengeButton = document.getElementById("close-challenge");
+const profileChallengeScore = document.getElementById("profile-challenge-score");
+const profileChallengeScoreValue = document.getElementById("profile-challenge-score-value");
 
-const adminMemberPanel = document.createElement("section");
-adminMemberPanel.className = "admin-member-panel panel";
-adminMemberPanel.hidden = true;
+const adminManagementButton = document.createElement("button");
+adminManagementButton.className = "button button-primary admin-management-button";
+adminManagementButton.type = "button";
+adminManagementButton.textContent = "📊 Quản lý thành viên & Thống kê điểm số";
+adminManagementButton.hidden = true;
+adminManagementButton.setAttribute("aria-haspopup", "dialog");
+adminManagementButton.setAttribute("aria-controls", "admin-management-dialog");
+authControls.appendChild(adminManagementButton);
+
+const adminMemberPanel = document.createElement("dialog");
+adminMemberPanel.id = "admin-management-dialog";
+adminMemberPanel.className = "admin-member-dialog";
+adminMemberPanel.setAttribute("aria-labelledby", "admin-member-title");
 const adminMemberTitle = document.createElement("h2");
-adminMemberTitle.textContent = "Quản lý thành viên";
+adminMemberTitle.id = "admin-member-title";
+adminMemberTitle.textContent = "Quản lý thành viên & Thống kê điểm số";
+const adminPanelHeader = document.createElement("div");
+adminPanelHeader.className = "admin-dialog-header";
+const adminPanelCloseButton = document.createElement("button");
+adminPanelCloseButton.className = "button button-outline admin-dialog-close";
+adminPanelCloseButton.type = "button";
+adminPanelCloseButton.setAttribute("aria-label", "Đóng bảng quản trị");
+adminPanelCloseButton.textContent = "×";
 const adminMemberDescription = document.createElement("p");
 adminMemberDescription.textContent =
   "Khóa tài khoản sẽ chặn đăng bài và ẩn bài viết; mở khóa sẽ khôi phục quyền đăng và hiển thị.";
@@ -150,19 +452,85 @@ adminMemberStatus.className = "form-status";
 adminMemberStatus.setAttribute("role", "status");
 const adminMemberList = document.createElement("div");
 adminMemberList.className = "admin-member-list";
+const adminGiftStatus = document.createElement("p");
+adminGiftStatus.className = "form-status";
+adminGiftStatus.setAttribute("role", "status");
+const adminGiftList = document.createElement("div");
+adminGiftList.className = "admin-member-list";
+const adminTabs = document.createElement("div");
+adminTabs.className = "admin-tabs";
+adminTabs.setAttribute("role", "tablist");
+const adminMembersTab = document.createElement("button");
+adminMembersTab.className = "button button-outline admin-tab is-active";
+adminMembersTab.type = "button";
+adminMembersTab.textContent = "Quản lý thành viên";
+adminMembersTab.setAttribute("role", "tab");
+const adminGiftsTab = document.createElement("button");
+adminGiftsTab.className = "button button-outline admin-tab";
+adminGiftsTab.type = "button";
+adminGiftsTab.setAttribute("role", "tab");
+adminGiftsTab.appendChild(document.createTextNode("Danh sách đạt 500 điểm nhận quà "));
+const adminGiftBadge = document.createElement("span");
+adminGiftBadge.className = "admin-gift-badge";
+adminGiftBadge.hidden = true;
+adminGiftsTab.appendChild(adminGiftBadge);
+const adminMembersView = document.createElement("div");
+adminMembersView.className = "admin-tab-panel";
+adminMembersView.setAttribute("role", "tabpanel");
+const adminGiftsView = document.createElement("div");
+adminGiftsView.className = "admin-tab-panel";
+adminGiftsView.setAttribute("role", "tabpanel");
+adminGiftsView.hidden = true;
 adminMemberPanel.append(
-  adminMemberTitle,
-  adminMemberDescription,
-  adminMemberStatus,
-  adminMemberList
+  adminPanelHeader,
+  adminTabs,
+  adminMembersView,
+  adminGiftsView
 );
-postsSection.parentNode.insertBefore(adminMemberPanel, postsSection);
+adminPanelHeader.append(adminMemberTitle, adminPanelCloseButton);
+adminTabs.append(adminMembersTab, adminGiftsTab);
+adminMembersView.append(adminMemberDescription, adminMemberStatus, adminMemberList);
+adminGiftsView.append(adminGiftStatus, adminGiftList);
+document.body.appendChild(adminMemberPanel);
+
+adminManagementButton.addEventListener("click", function () {
+  if (!isAdminUser(auth && auth.currentUser)) {
+    return;
+  }
+  showAdminTab("members");
+  if (!adminMemberPanel.open) {
+    adminMemberPanel.showModal();
+  }
+});
+
+adminPanelCloseButton.addEventListener("click", function () {
+  adminMemberPanel.close();
+});
+
+adminMemberPanel.addEventListener("click", function (event) {
+  if (event.target === adminMemberPanel) {
+    adminMemberPanel.close();
+  }
+});
 
 function isAdminUser(user) {
   const email = user && typeof user.email === "string" ? user.email.trim().toLowerCase() : "";
   return ADMIN_EMAILS.some(function (adminEmail) {
     return adminEmail.trim().toLowerCase() === email;
   });
+}
+
+function isAdminMember(member) {
+  if (!member) {
+    return false;
+  }
+  const role = typeof member.role === "string" ? member.role.trim().toLowerCase() : "";
+  const signedInUser = auth && auth.currentUser;
+  return role === "admin"
+    || isAdminUser({ email: member.email })
+    || Boolean(signedInUser
+      && isAdminUser(signedInUser)
+      && member.uid === signedInUser.uid);
 }
 
 let firebaseReady = false;
@@ -193,8 +561,38 @@ const bannedUserIds = new Set();
 const adminBanSyncInProgress = new Set();
 let bannedUsersUnsubscribe = null;
 let adminUsersUnsubscribe = null;
+let adminGiftsUnsubscribe = null;
 let bannedUsersLoaded = false;
 let adminMembers = [];
+let giftNotifications = [];
+let challengeScore = 0;
+let challengeRoundScoreValue = 0;
+let challengeQuestionIndex = 0;
+let challengeViolationCount = 0;
+let challengeCorrectCount = 0;
+let challengeIncorrectCount = 0;
+let challengeSkippedCount = 0;
+let challengeTimedOutCount = 0;
+let challengeActive = false;
+let challengeQuestionLocked = false;
+let challengeSaved = false;
+let challengeCancelled = false;
+let challengeCompleted = false;
+let challengeAdminTestMode = false;
+let challengeFocusLossRecorded = false;
+let challengeWindowBlurred = false;
+let challengeDocumentHidden = false;
+let completedChallengeQuestionIds = new Set();
+let roundCorrectQuestionIds = new Set();
+let challengeDeadline = 0;
+let challengeTimerInterval = null;
+let challengeAdvanceTimeout = null;
+let challengeAudioContext = null;
+let challengeAudioMasterGain = null;
+let challengeAudioCompressor = null;
+let challengeReactionTimeout = null;
+const challengeMemeQueues = { correct: [], incorrect: [], skip: [] };
+let lastChallengeMemeSource = "";
 
 function showStatus(message, isError, isSuccess) {
   formStatus.textContent = message;
@@ -208,13 +606,110 @@ function setAdminMemberStatus(message, isError) {
   adminMemberStatus.classList.toggle("is-success", Boolean(message) && !isError);
 }
 
+function setAdminGiftStatus(message, isError) {
+  adminGiftStatus.textContent = message;
+  adminGiftStatus.classList.toggle("is-error", Boolean(isError));
+  adminGiftStatus.classList.toggle("is-success", Boolean(message) && !isError);
+}
+
+function showAdminTab(tab) {
+  const showGifts = tab === "gifts";
+  adminMembersView.hidden = showGifts;
+  adminGiftsView.hidden = !showGifts;
+  adminMembersTab.classList.toggle("is-active", !showGifts);
+  adminGiftsTab.classList.toggle("is-active", showGifts);
+  adminMembersTab.setAttribute("aria-selected", String(!showGifts));
+  adminGiftsTab.setAttribute("aria-selected", String(showGifts));
+}
+
+adminMembersTab.addEventListener("click", function () {
+  showAdminTab("members");
+});
+
+adminGiftsTab.addEventListener("click", function () {
+  showAdminTab("gifts");
+});
+
+function renderAdminGifts() {
+  adminGiftList.replaceChildren();
+  const memberNotifications = giftNotifications.filter(function (notification) {
+    const email = typeof notification.userEmail === "string"
+      ? notification.userEmail.trim().toLowerCase()
+      : "";
+    const isAdminEmail = ADMIN_EMAILS.some(function (adminEmail) {
+      return adminEmail.trim().toLowerCase() === email;
+    });
+    const isCurrentAdmin = isAdminUser(auth && auth.currentUser)
+      && notification.uid === auth.currentUser.uid;
+    return !isAdminEmail && !isCurrentAdmin;
+  });
+  const pendingCount = memberNotifications.filter(function (notification) {
+    return notification.status === "pending";
+  }).length;
+  adminGiftBadge.textContent = String(pendingCount);
+  adminGiftBadge.hidden = pendingCount === 0;
+  if (!isAdminUser(auth && auth.currentUser)) {
+    return;
+  }
+  if (memberNotifications.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "profile-muted";
+    empty.textContent = "Chưa có thành viên đạt mốc nhận quà.";
+    adminGiftList.appendChild(empty);
+    return;
+  }
+
+  memberNotifications.forEach(function (notification) {
+    const row = document.createElement("article");
+    row.className = "profile-list-item admin-member-row";
+    const details = document.createElement("div");
+    details.className = "profile-list-item-text";
+    const name = document.createElement("h3");
+    name.textContent = notification.userName || "Thành viên";
+    const description = document.createElement("p");
+    const reachedAt = notification.reachedAt
+      && typeof notification.reachedAt.toDate === "function"
+      ? notification.reachedAt.toDate().toLocaleString("vi-VN")
+      : "Thời gian đang cập nhật";
+    description.textContent = (notification.userEmail || "Không có email")
+      + " · " + notification.score + " điểm · " + reachedAt
+      + " · " + (notification.status === "completed" ? "Đã trao quà" : "Đang chờ trao");
+    details.append(name, description);
+    row.appendChild(details);
+    if (notification.status === "pending") {
+      const completeButton = document.createElement("button");
+      completeButton.className = "button button-admin-unlock";
+      completeButton.type = "button";
+      completeButton.textContent = "Đã trao quà";
+      completeButton.addEventListener("click", function () {
+        markGiftAsCompleted(notification.id, completeButton);
+      });
+      row.appendChild(completeButton);
+    }
+    adminGiftList.appendChild(row);
+  });
+}
+
+async function markGiftAsCompleted(notificationId, button) {
+  if (!isAdminUser(auth && auth.currentUser)) {
+    return;
+  }
+  button.disabled = true;
+  try {
+    await updateDoc(doc(db, "gift_notifications", notificationId), {
+      status: "completed"
+    });
+  } catch (error) {
+    setAdminGiftStatus("Không thể cập nhật trạng thái quà: " + error.message, true);
+    button.disabled = false;
+  }
+}
+
 function renderAdminMembers(members) {
   adminMemberList.replaceChildren();
   if (!isAdminUser(auth && auth.currentUser)) {
-    adminMemberPanel.hidden = true;
     return;
   }
-  adminMemberPanel.hidden = false;
   if (members.length === 0) {
     const empty = document.createElement("p");
     empty.className = "profile-muted";
@@ -235,6 +730,7 @@ function renderAdminMembers(members) {
     const isCurrentAdmin = Boolean(currentUser
       && member.uid === currentUser.uid
       && isAdminUser(currentUser));
+    const isProtectedAdmin = isAdminMember(member);
     name.textContent = isCurrentAdmin ? "Admin" : member.displayName || "Thành viên";
     if (isCurrentAdmin) {
       const ownerBadge = document.createElement("span");
@@ -255,11 +751,19 @@ function renderAdminMembers(members) {
       : "button button-admin-lock";
     button.type = "button";
     button.textContent = member.isBanned ? "Mở khóa tài khoản" : "Khóa tài khoản";
+    button.disabled = isProtectedAdmin && !member.isBanned;
+    if (button.disabled) {
+      button.title = "Không thể khóa tài khoản Admin Chủ Web.";
+    }
     button.addEventListener("click", function () {
       if (!isAdminUser(auth && auth.currentUser)) {
         return;
       }
       const nextBannedState = !member.isBanned;
+      if (nextBannedState && isAdminMember(member)) {
+        window.alert("Không thể khóa tài khoản Admin Chủ Web!");
+        return;
+      }
       const action = nextBannedState ? "khóa" : "mở khóa";
       if (window.confirm("Bạn có chắc muốn " + action + " tài khoản này?")) {
         setMemberBanned(member.uid, nextBannedState, button);
@@ -341,6 +845,8 @@ function subscribeToAdminMembers(user) {
       return {
         uid: documentSnapshot.id,
         displayName: profile.displayName || "",
+        email: typeof profile.email === "string" ? profile.email : "",
+        role: typeof profile.role === "string" ? profile.role : "",
         postCount: Number.isInteger(profile.postCount) ? profile.postCount : 0,
         violationCount: Number.isInteger(profile.violationCount) ? profile.violationCount : 0,
         isBanned: profile.isBanned === true
@@ -355,10 +861,45 @@ function subscribeToAdminMembers(user) {
   });
 }
 
+function subscribeToAdminGifts(user) {
+  if (adminGiftsUnsubscribe) {
+    adminGiftsUnsubscribe();
+    adminGiftsUnsubscribe = null;
+  }
+  if (!isAdminUser(user)) {
+    giftNotifications = [];
+    adminGiftList.replaceChildren();
+    adminGiftBadge.hidden = true;
+    return;
+  }
+  adminGiftsUnsubscribe = onSnapshot(collection(db, "gift_notifications"), function (snapshot) {
+    giftNotifications = snapshot.docs.map(function (documentSnapshot) {
+      return Object.assign({ id: documentSnapshot.id }, documentSnapshot.data());
+    }).sort(function (first, second) {
+      const firstTime = first.reachedAt && typeof first.reachedAt.toMillis === "function"
+        ? first.reachedAt.toMillis()
+        : 0;
+      const secondTime = second.reachedAt && typeof second.reachedAt.toMillis === "function"
+        ? second.reachedAt.toMillis()
+        : 0;
+      return secondTime - firstTime;
+    });
+    renderAdminGifts();
+    setAdminGiftStatus("Đã tải " + giftNotifications.length + " yêu cầu nhận quà.", false);
+  }, function (error) {
+    console.error("Không thể tải yêu cầu nhận quà:", error);
+    setAdminGiftStatus("Không thể tải danh sách nhận quà: " + error.message, true);
+  });
+}
+
 async function setMemberBanned(userId, shouldBeBanned, button) {
   const adminUser = auth && auth.currentUser;
   if (!isAdminUser(adminUser)
     || !userId) {
+    return;
+  }
+  if (shouldBeBanned && userId === adminUser.uid) {
+    window.alert("Không thể khóa tài khoản Admin Chủ Web!");
     return;
   }
 
@@ -376,6 +917,13 @@ async function setMemberBanned(userId, shouldBeBanned, button) {
       }
 
       const profile = profileSnapshot.data();
+      if (shouldBeBanned && isAdminMember({
+        uid: userId,
+        email: profile.email,
+        role: profile.role
+      })) {
+        throw new Error("Không thể khóa tài khoản Admin Chủ Web!");
+      }
       const violationCount = Number.isInteger(profile.violationCount)
         ? profile.violationCount
         : 0;
@@ -409,6 +957,9 @@ async function setMemberBanned(userId, shouldBeBanned, button) {
     );
   } catch (error) {
     setAdminMemberStatus("Không thể cập nhật tài khoản: " + error.message, true);
+    if (error.message === "Không thể khóa tài khoản Admin Chủ Web!") {
+      window.alert(error.message);
+    }
   } finally {
     adminBanSyncInProgress.delete(userId);
     button.disabled = false;
@@ -448,7 +999,10 @@ function updateAuthControls(user) {
   }
   const signedIn = Boolean(currentUser);
   const isAdmin = isAdminUser(currentUser);
-  adminMemberPanel.hidden = !signedIn || !isAdmin || !profilePage.hidden;
+  adminManagementButton.hidden = !signedIn || !isAdmin;
+  if ((!signedIn || !isAdmin) && adminMemberPanel.open) {
+    adminMemberPanel.close();
+  }
   authStatus.textContent = firebaseReady
     ? "Bạn cần đăng nhập bằng Google để đăng bài viết."
     : "Không thể kết nối Firebase. Vui lòng thử lại sau.";
@@ -556,6 +1110,881 @@ function saveAuthMetadata(user) {
     lastLogin: serverTimestamp()
   }, { merge: true });
 }
+
+function challengeScoreRef(userId) {
+  return doc(db, "users", userId, "private", "challenge");
+}
+
+function updateChallengeFocusState() {
+  const focusLost = challengeWindowBlurred || challengeDocumentHidden;
+  if (!focusLost) {
+    challengeFocusLossRecorded = false;
+    return;
+  }
+  if (!challengeActive || challengeFocusLossRecorded) {
+    return;
+  }
+  challengeFocusLossRecorded = true;
+  challengeViolationCount += 1;
+  challengeIntegrityWarning.hidden = false;
+  challengeIntegrityWarning.classList.remove("is-cancelled");
+  challengeIntegrityWarning.textContent = "Cảnh báo! Phát hiện bạn rời khỏi màn hình làm bài (Lần "
+    + challengeViolationCount + "/3). Vi phạm quá 3 lần sẽ bị hủy kết quả bài thi!";
+  if (challengeViolationCount >= 3) {
+    cancelChallengeForViolations();
+  }
+}
+
+function getChallengeReactionMeme(type) {
+  const memes = CHALLENGE_REACTION_MEMES[type];
+  const queue = challengeMemeQueues[type];
+  if (queue.length === 0) {
+    for (let index = 0; index < memes.length; index += 1) {
+      queue.push(index);
+    }
+    for (let index = queue.length - 1; index > 0; index -= 1) {
+      const swapIndex = Math.floor(Math.random() * (index + 1));
+      const currentIndex = queue[index];
+      queue[index] = queue[swapIndex];
+      queue[swapIndex] = currentIndex;
+    }
+    const nextIndex = queue[queue.length - 1];
+    if (queue.length > 1 && memes[nextIndex].src === lastChallengeMemeSource) {
+      const alternateIndex = queue.findIndex(function (memeIndex) {
+        return memes[memeIndex].src !== lastChallengeMemeSource;
+      });
+      if (alternateIndex >= 0) {
+        const currentIndex = queue[queue.length - 1];
+        queue[queue.length - 1] = queue[alternateIndex];
+        queue[alternateIndex] = currentIndex;
+      }
+    }
+  }
+  const nextMeme = memes[queue.pop()];
+  lastChallengeMemeSource = nextMeme.src;
+  return nextMeme;
+}
+
+function hideChallengeReaction() {
+  if (challengeReactionTimeout !== null) {
+    window.clearTimeout(challengeReactionTimeout);
+    challengeReactionTimeout = null;
+  }
+  challengeReaction.hidden = true;
+}
+
+function showChallengeReaction(meme, response, reactionType, duration) {
+  hideChallengeReaction();
+  challengeReactionCaption.textContent = response;
+  challengeReaction.classList.remove("is-correct", "is-incorrect", "is-skip");
+  challengeReaction.classList.add("is-" + reactionType);
+  challengeReactionError.hidden = true;
+  challengeReactionImage.hidden = false;
+  challengeReactionImage.alt = meme.alt;
+  challengeReactionImage.dataset.memeSrc = meme.src;
+  challengeReactionImage.onerror = function () {
+    if (challengeReactionImage.dataset.memeSrc === meme.src) {
+      challengeReactionImage.hidden = true;
+      challengeReactionError.hidden = false;
+      challengeReactionError.textContent = "Không tải được GIF; lời nhắn và âm thanh vẫn hoạt động.";
+    }
+  };
+  challengeReactionImage.src = meme.src;
+  challengeReaction.hidden = false;
+  challengeReactionTimeout = window.setTimeout(hideChallengeReaction, duration);
+}
+
+function cancelChallengeForViolations() {
+  challengeActive = false;
+  challengeCancelled = true;
+  challengeSaved = true;
+  clearChallengeTimers();
+  roundCorrectQuestionIds.clear();
+  challengeRoundScoreValue = 0;
+  challengeQuestionLocked = true;
+  challengeQuestion.textContent = "Bài thi đã bị hủy";
+  challengeProgressInfo.textContent = "Kết quả lượt thi này không được tính điểm.";
+  challengeOptions.querySelectorAll("button").forEach(function (option) {
+    option.disabled = true;
+  });
+  challengeSkipButton.disabled = true;
+  challengeOptions.replaceChildren();
+  challengeRoundScore.textContent = "Điểm lượt này: 0";
+  challengeFeedback.textContent = "";
+  challengeIntegrityWarning.hidden = false;
+  challengeIntegrityWarning.classList.add("is-cancelled");
+  challengeIntegrityWarning.textContent =
+    "Bạn đã vi phạm quy chế chuyển tab quá 3 lần. Bài thi đã bị hủy và không được tính điểm!";
+  challengeTimerBar.style.width = "0%";
+  challengeTimer.setAttribute("aria-valuenow", "0");
+  closeChallengeButton.disabled = false;
+  closeChallengeButton.textContent = "Quay lại trang chủ";
+}
+
+document.addEventListener("visibilitychange", function () {
+  challengeDocumentHidden = document.hidden;
+  if (!challengeDocumentHidden && document.hasFocus()) {
+    challengeWindowBlurred = false;
+  }
+  updateChallengeFocusState();
+});
+
+window.addEventListener("blur", function () {
+  challengeWindowBlurred = true;
+  updateChallengeFocusState();
+});
+
+window.addEventListener("focus", function () {
+  challengeWindowBlurred = false;
+  updateChallengeFocusState();
+});
+
+function clearChallengeTimers() {
+  if (challengeTimerInterval !== null) {
+    window.clearInterval(challengeTimerInterval);
+    challengeTimerInterval = null;
+  }
+  if (challengeAdvanceTimeout !== null) {
+    window.clearTimeout(challengeAdvanceTimeout);
+    challengeAdvanceTimeout = null;
+  }
+  hideChallengeReaction();
+}
+
+function updateChallengeTimer() {
+  const remaining = Math.max(0, challengeDeadline - Date.now());
+  const fraction = remaining / QUESTION_TIME_MS;
+  challengeTimerBar.style.width = (fraction * 100) + "%";
+  challengeTimer.setAttribute("aria-valuenow", String(Math.ceil(remaining / 1000)));
+  if (remaining === 0 && challengeActive && !challengeQuestionLocked) {
+    chooseChallengeAnswer(-1);
+  }
+}
+
+function startChallengeTimer() {
+  clearChallengeTimers();
+  challengeDeadline = Date.now() + QUESTION_TIME_MS;
+  updateChallengeTimer();
+  challengeTimerInterval = window.setInterval(updateChallengeTimer, 50);
+}
+
+function renderChallengeQuestion() {
+  if (!challengeActive) {
+    return;
+  }
+  if (challengeQuestionIndex >= QUIZ_DATA.length) {
+    finishChallenge();
+    return;
+  }
+
+  const item = QUIZ_DATA[challengeQuestionIndex];
+  challengeQuestionLocked = false;
+  challengeSkipButton.disabled = false;
+  challengeProgressInfo.textContent =
+    "Câu " + (challengeQuestionIndex + 1) + " / " + QUIZ_DATA.length;
+  challengeQuestion.textContent = item.question;
+  challengeFeedback.textContent = completedChallengeQuestionIds.has(item.id)
+    ? "Bạn đã đạt điểm câu này từ trước. Hãy trả lời để ôn tập; câu này không cộng thêm điểm."
+    : "";
+  challengeOptions.replaceChildren();
+  item.options.forEach(function (answer, index) {
+    const option = document.createElement("button");
+    option.className = "challenge-option";
+    option.type = "button";
+    option.textContent = String.fromCharCode(65 + index) + ". " + answer;
+    option.addEventListener("click", function () {
+      chooseChallengeAnswer(index);
+    });
+    challengeOptions.appendChild(option);
+  });
+  challengeRoundScore.textContent = "Điểm lượt này: " + challengeRoundScoreValue;
+  startChallengeTimer();
+}
+
+function getChallengeAudioContext() {
+  if (!window.AudioContext) {
+    return null;
+  }
+  try {
+    if (!challengeAudioContext) {
+      challengeAudioContext = new window.AudioContext();
+      challengeAudioMasterGain = challengeAudioContext.createGain();
+      challengeAudioCompressor = challengeAudioContext.createDynamicsCompressor();
+      challengeAudioCompressor.threshold.value = -8;
+      challengeAudioCompressor.knee.value = 6;
+      challengeAudioCompressor.ratio.value = 12;
+      challengeAudioCompressor.attack.value = 0.003;
+      challengeAudioCompressor.release.value = 0.18;
+      challengeAudioMasterGain.gain.value = 1.4;
+      challengeAudioMasterGain.connect(challengeAudioCompressor);
+      challengeAudioCompressor.connect(challengeAudioContext.destination);
+    }
+    if (challengeAudioContext.state === "suspended") {
+      challengeAudioContext.resume().catch(function (error) {
+        console.warn("Không thể bật âm thanh thử thách:", error);
+      });
+    }
+    return challengeAudioContext;
+  } catch (error) {
+    console.warn("Không thể khởi tạo Web Audio API:", error);
+    return null;
+  }
+}
+
+function playChallengeTone(context, frequency, startTime, duration, waveform, volume, endFrequency) {
+  const oscillator = context.createOscillator();
+  const gain = context.createGain();
+  oscillator.type = waveform;
+  oscillator.frequency.setValueAtTime(frequency, startTime);
+  if (endFrequency) {
+    oscillator.frequency.exponentialRampToValueAtTime(endFrequency, startTime + duration);
+  }
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.015);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+  oscillator.connect(gain);
+  gain.connect(challengeAudioMasterGain);
+  oscillator.start(startTime);
+  oscillator.stop(startTime + duration + 0.01);
+}
+
+function playChallengeClap(context, startTime, frequency, volume) {
+  const duration = 0.105;
+  const frameCount = Math.floor(context.sampleRate * duration);
+  const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    channel[frame] = (Math.random() * 2 - 1) * (1 - frame / frameCount);
+  }
+  const source = context.createBufferSource();
+  const filter = context.createBiquadFilter();
+  const gain = context.createGain();
+  source.buffer = buffer;
+  filter.type = "bandpass";
+  filter.frequency.setValueAtTime(frequency, startTime);
+  filter.Q.setValueAtTime(0.8, startTime);
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.exponentialRampToValueAtTime(volume, startTime + 0.006);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(challengeAudioMasterGain);
+  source.start(startTime);
+  source.stop(startTime + duration);
+}
+
+function playChallengeSigh(context, startTime) {
+  const duration = 0.88;
+  const frameCount = Math.floor(context.sampleRate * duration);
+  const buffer = context.createBuffer(1, frameCount, context.sampleRate);
+  const channel = buffer.getChannelData(0);
+  for (let frame = 0; frame < frameCount; frame += 1) {
+    channel[frame] = (Math.random() * 2 - 1) * (1 - frame / frameCount * 0.25);
+  }
+  const source = context.createBufferSource();
+  const filter = context.createBiquadFilter();
+  const gain = context.createGain();
+  source.buffer = buffer;
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(900, startTime);
+  filter.frequency.linearRampToValueAtTime(520, startTime + duration);
+  gain.gain.setValueAtTime(0.0001, startTime);
+  gain.gain.linearRampToValueAtTime(0.025, startTime + 0.22);
+  gain.gain.linearRampToValueAtTime(0.03, startTime + 0.42);
+  gain.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(challengeAudioMasterGain);
+  source.start(startTime);
+  source.stop(startTime + duration);
+  playChallengeTone(context, 260, startTime + 0.1, 0.72, "sine", 0.025, 145);
+}
+
+function playChallengeSound(correct, soundStyle) {
+  const context = getChallengeAudioContext();
+  if (!context) {
+    return;
+  }
+  try {
+    const now = context.currentTime + 0.015;
+    if (correct) {
+      for (let clap = 0; clap < 14; clap += 1) {
+        const startTime = now + clap * 0.075 + Math.random() * 0.035;
+        const frequency = 900 + Math.random() * 1900;
+        const volume = 0.1 + Math.random() * 0.08;
+        playChallengeClap(context, startTime, frequency, volume);
+      }
+      if (soundStyle === "cheer-fireworks") {
+        [[523.25, 0], [659.25, 0.12], [783.99, 0.24], [1046.5, 0.39]].forEach(function (note) {
+          playChallengeTone(context, note[0], now + note[1], 0.22, "triangle", 0.085);
+        });
+        playChallengeTone(context, 420, now + 0.08, 0.52, "sawtooth", 0.025, 790);
+        playChallengeTone(context, 520, now + 0.18, 0.48, "triangle", 0.035, 980);
+        for (let burst = 0; burst < 6; burst += 1) {
+          const burstTime = now + 0.55 + burst * 0.11 + Math.random() * 0.04;
+          playChallengeClap(context, burstTime, 2400 + Math.random() * 1000, 0.15);
+          playChallengeTone(context, 1500 + burst * 130, burstTime, 0.16, "sine", 0.045, 900);
+        }
+      }
+      if (soundStyle === "vuvuzela") {
+        [[220, 0], [224, 0.03], [228, 0.06]].forEach(function (note) {
+          playChallengeTone(context, note[0], now + note[1], 0.68, "sawtooth", 0.045, note[0] * 1.04);
+        });
+      }
+      if (soundStyle === "reward-bell") {
+        [[1046.5, 0], [1318.5, 0.16], [1568, 0.34]].forEach(function (note) {
+          playChallengeTone(context, note[0], now + note[1], 0.42, "sine", 0.11);
+          playChallengeTone(context, note[0] * 2, now + note[1], 0.24, "sine", 0.035);
+        });
+      }
+      if (soundStyle === "victory-bell") {
+        [[783.99, 0], [1046.5, 0.15], [1318.5, 0.3], [1568, 0.46]].forEach(function (note) {
+          playChallengeTone(context, note[0], now + note[1], 0.62, "triangle", 0.085);
+        });
+      }
+      return;
+    }
+    if (soundStyle === "sigh") {
+      playChallengeSigh(context, now);
+      return;
+    }
+    if (soundStyle === "bruh") {
+      playChallengeTone(context, 180, now, 0.42, "triangle", 0.08, 76);
+      playChallengeTone(context, 105, now + 0.18, 0.5, "sawtooth", 0.035, 62);
+      return;
+    }
+    if (soundStyle === "toy-horn") {
+      playChallengeTone(context, 420, now, 0.16, "square", 0.055, 680);
+      playChallengeTone(context, 680, now + 0.17, 0.16, "square", 0.055, 460);
+      playChallengeTone(context, 460, now + 0.34, 0.2, "square", 0.05, 310);
+      return;
+    }
+    if (soundStyle === "sad-horn") {
+      [[390, 0], [330, 0.2], [260, 0.4]].forEach(function (note) {
+        playChallengeTone(context, note[0], now + note[1], 0.28, "triangle", 0.07, note[0] * 0.78);
+      });
+      return;
+    }
+    if (soundStyle === "crying") {
+      playChallengeTone(context, 520, now, 0.55, "triangle", 0.06, 430);
+      playChallengeTone(context, 640, now + 0.18, 0.4, "sine", 0.045, 500);
+      playChallengeTone(context, 480, now + 0.55, 0.4, "triangle", 0.055, 390);
+      return;
+    }
+    if (soundStyle === "curious") {
+      playChallengeTone(context, 390, now, 0.38, "sine", 0.075, 195);
+      playChallengeTone(context, 610, now + 0.25, 0.22, "triangle", 0.055, 430);
+      playChallengeTone(context, 470, now + 0.48, 0.25, "sine", 0.05, 650);
+      playChallengeTone(context, 740, now + 0.69, 0.23, "sine", 0.04, 570);
+      return;
+    }
+    playChallengeTone(context, 640, now, 0.34, "triangle", 0.09, 245);
+    playChallengeTone(context, 190, now + 0.26, 0.16, "sine", 0.055, 125);
+  } catch (error) {
+    console.warn("Không thể phát hiệu ứng âm thanh thử thách:", error);
+  }
+}
+
+function getChallengeReactionSoundStyle(correct, skipped) {
+  if (skipped) {
+    return "curious";
+  }
+  const soundStyles = correct
+    ? ["cheer-fireworks", "vuvuzela", "reward-bell", "victory-bell"]
+    : ["bruh", "toy-horn", "sigh", "sad-horn", "crying"];
+  return soundStyles[Math.floor(Math.random() * soundStyles.length)];
+}
+
+function getChallengeResponse(correct) {
+  const responses = correct ? CORRECT_RESPONSE_LINES : INCORRECT_RESPONSE_LINES;
+  return responses[Math.floor(Math.random() * responses.length)];
+}
+
+function chooseChallengeAnswer(selectedIndex) {
+  if (!challengeActive || challengeQuestionLocked) {
+    return;
+  }
+  challengeQuestionLocked = true;
+  if (challengeTimerInterval !== null) {
+    window.clearInterval(challengeTimerInterval);
+    challengeTimerInterval = null;
+  }
+  const item = QUIZ_DATA[challengeQuestionIndex];
+  const skipped = selectedIndex === -2;
+  const timedOut = selectedIndex === -1;
+  const correct = selectedIndex >= 0 && selectedIndex === item.answer;
+  const correctAnswer = String.fromCharCode(65 + item.answer) + ". " + item.options[item.answer];
+  const reactionDuration = skipped ? SKIP_REACTION_DURATION_MS : REACTION_DURATION_MS;
+  if (selectedIndex >= 0) {
+    const response = getChallengeResponse(correct);
+    const meme = getChallengeReactionMeme(correct ? "correct" : "incorrect");
+    showChallengeReaction(meme, response, correct ? "correct" : "incorrect", reactionDuration);
+    playChallengeSound(correct, getChallengeReactionSoundStyle(correct, false));
+  } else {
+    const response = skipped
+      ? "BIẾT NGAY MÀ! XEM ĐÁP ÁN ĐỂ MỞ MANG TẦM MẮT NÀO: Đáp án đúng là "
+        + correctAnswer + "."
+      : "Hết giờ mất rồi! Đáp án đúng là " + correctAnswer + ".";
+    const meme = getChallengeReactionMeme("skip");
+    showChallengeReaction(
+      meme,
+      response,
+      "skip",
+      skipped ? SKIP_REACTION_DURATION_MS : REACTION_DURATION_MS
+    );
+    playChallengeSound(false, getChallengeReactionSoundStyle(false, selectedIndex < 0));
+  }
+  const alreadyEarned = completedChallengeQuestionIds.has(item.id)
+    || roundCorrectQuestionIds.has(item.id);
+  if (correct) {
+    challengeCorrectCount += 1;
+  } else if (timedOut) {
+    challengeTimedOutCount += 1;
+  } else if (skipped) {
+    challengeSkippedCount += 1;
+  } else {
+    challengeIncorrectCount += 1;
+  }
+  challengeOptions.querySelectorAll("button").forEach(function (option, index) {
+    option.disabled = true;
+    if (index === item.answer) {
+      option.classList.add("is-correct");
+    } else if (index === selectedIndex) {
+      option.classList.add("is-incorrect");
+    }
+  });
+  challengeSkipButton.disabled = true;
+  if (correct && !alreadyEarned) {
+    roundCorrectQuestionIds.add(item.id);
+    challengeRoundScoreValue += 1;
+    challengeRoundScore.textContent = "Điểm lượt này: " + challengeRoundScoreValue;
+    if (challengeAdminTestMode) {
+      challengeScoreValue.textContent = challengeRoundScoreValue + " điểm test";
+    }
+  }
+  if (timedOut) {
+    challengeFeedback.textContent = "Hết giờ! Đáp án đúng là " + correctAnswer + ".";
+  } else if (skipped) {
+    challengeFeedback.textContent = "Bạn đã bỏ qua. Đáp án đúng là " + correctAnswer + ".";
+  } else if (!correct) {
+    challengeFeedback.textContent = "Chưa chính xác. Đáp án đúng là " + correctAnswer + ".";
+  } else if (alreadyEarned) {
+    challengeFeedback.textContent =
+      "Chính xác! Câu này đã được tính điểm trước đó nên không cộng thêm.";
+  } else if (challengeAdminTestMode) {
+    challengeFeedback.textContent = "Chính xác! Đáp án đúng trong lượt kiểm tra.";
+  } else {
+    challengeFeedback.textContent =
+      "Chính xác! Câu này sẽ được cộng 1 điểm nếu chưa được ghi nhận trên tài khoản.";
+  }
+  challengeAdvanceTimeout = window.setTimeout(function () {
+    challengeAdvanceTimeout = null;
+    challengeQuestionIndex += 1;
+    renderChallengeQuestion();
+  }, reactionDuration);
+}
+
+async function saveChallengeRound() {
+  if (challengeSaved) {
+    return true;
+  }
+  challengeSaved = true;
+  if (challengeAdminTestMode) {
+    challengeScoreValue.textContent = challengeRoundScoreValue + " điểm test";
+    challengeFeedback.classList.remove("is-error");
+    challengeFeedback.textContent = "Kết quả lượt kiểm tra: " + challengeCorrectCount
+      + " đúng, " + challengeIncorrectCount + " sai, " + challengeSkippedCount
+      + " bỏ qua, " + challengeTimedOutCount + " câu hết giờ. Điểm test không được lưu.";
+    startChallengeButton.disabled = false;
+    closeChallengeButton.disabled = false;
+    return true;
+  }
+  if (!currentUser || roundCorrectQuestionIds.size === 0) {
+    return true;
+  }
+  const user = currentUser;
+  const scoreRef = challengeScoreRef(user.uid);
+  const notificationRef = doc(collection(db, "gift_notifications"));
+  startChallengeButton.disabled = true;
+  closeChallengeButton.disabled = true;
+  challengeFeedback.textContent = "Đang lưu điểm của bạn...";
+  try {
+    const result = await runTransaction(db, async function (transaction) {
+      const scoreSnapshot = await transaction.get(scoreRef);
+      const previous = scoreSnapshot.exists() ? scoreSnapshot.data() : {};
+      const previousScore = Number.isInteger(previous.score) ? previous.score : 0;
+      const previousQuestionIds = Array.isArray(previous.correctQuestionIds)
+        ? previous.correctQuestionIds.filter(function (questionId) {
+          return typeof questionId === "string";
+        })
+        : [];
+      const savedQuestionIds = new Set(previousQuestionIds);
+      const newlyAwardedIds = Array.from(roundCorrectQuestionIds).filter(function (questionId) {
+        return !savedQuestionIds.has(questionId);
+      });
+      newlyAwardedIds.forEach(function (questionId) {
+        savedQuestionIds.add(questionId);
+      });
+      const totalScore = previousScore + newlyAwardedIds.length;
+      const alreadyNotified = previous.giftNotified === true;
+      const notifyGift = totalScore >= CHALLENGE_TARGET_SCORE && !alreadyNotified;
+      transaction.set(scoreRef, {
+        score: totalScore,
+        correctQuestionIds: Array.from(savedQuestionIds),
+        giftNotified: alreadyNotified || notifyGift,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      if (notifyGift) {
+        transaction.set(notificationRef, {
+          uid: user.uid,
+          userName: getCurrentDisplayName(),
+          userEmail: user.email || "",
+          score: totalScore,
+          reachedAt: serverTimestamp(),
+          status: "pending"
+        });
+      }
+      return {
+        score: totalScore,
+        newlyAwarded: newlyAwardedIds.length,
+        notified: notifyGift
+      };
+    });
+    challengeScore = result.score;
+    result.newlyAwarded && roundCorrectQuestionIds.forEach(function (questionId) {
+      completedChallengeQuestionIds.add(questionId);
+    });
+    challengeRoundScoreValue = result.newlyAwarded;
+    challengeRoundScore.textContent = "Điểm lượt này: " + challengeRoundScoreValue;
+    challengeScoreValue.textContent = challengeScore + " điểm";
+    if (activeProfileIsOwner && activeProfileId === user.uid) {
+      profileChallengeScoreValue.textContent = challengeScore + " điểm";
+    }
+    challengeFeedback.textContent = result.newlyAwarded > 0
+      ? "Đã ghi nhận " + result.newlyAwarded + " câu mới. Tổng điểm của bạn: "
+        + challengeScore + "."
+      : "Các câu đúng trong lượt này đã được tính điểm trước đó. Tổng điểm: "
+        + challengeScore + ".";
+    if (result.notified) {
+      window.alert("Chúc mừng! Bạn đã đạt " + challengeScore
+        + " điểm và đủ điều kiện nhận quà tri ân. Quản trị viên sẽ sớm liên hệ với bạn.");
+    }
+    return true;
+  } catch (error) {
+    console.error("Không thể lưu điểm thử thách:", error);
+    challengeFeedback.textContent = "Không thể lưu điểm: " + error.message;
+    challengeFeedback.classList.add("is-error");
+    challengeSaved = false;
+    return false;
+  } finally {
+    startChallengeButton.disabled = false;
+    closeChallengeButton.disabled = false;
+  }
+}
+
+async function saveChallengeHistory() {
+  const user = currentUser;
+  if (challengeAdminTestMode) {
+    return false;
+  }
+  if (!user) {
+    throw new Error("Bạn cần đăng nhập để lưu lịch sử thử thách.");
+  }
+  const historyRef = doc(collection(
+    db,
+    "users",
+    user.uid,
+    "private",
+    "challenge",
+    "history"
+  ));
+  await setDoc(historyRef, {
+    completedAt: serverTimestamp(),
+    correctCount: challengeCorrectCount,
+    totalQuestions: QUIZ_DATA.length,
+    score: challengeRoundScoreValue
+  });
+  return true;
+}
+
+async function loadChallengeHistory() {
+  const user = currentUser;
+  if (!user) {
+    challengeHistoryStatus.textContent = "Vui lòng đăng nhập để xem lịch sử làm bài.";
+    return;
+  }
+  challengeHistoryStatus.classList.remove("is-error");
+  challengeHistoryStatus.textContent = "Đang tải lịch sử...";
+  challengeHistoryList.replaceChildren();
+  try {
+    const historyQuery = query(
+      collection(db, "users", user.uid, "private", "challenge", "history"),
+      orderBy("completedAt", "desc"),
+      limit(10)
+    );
+    const historySnapshot = await getDocs(historyQuery);
+    if (!currentUser || currentUser.uid !== user.uid) {
+      return;
+    }
+    if (historySnapshot.empty) {
+      challengeHistoryStatus.textContent = isAdminUser(user)
+        ? "Chưa có lịch sử. Các lượt kiểm tra của Admin không được lưu."
+        : "Bạn chưa có lượt thử thách hoàn thành nào.";
+      return;
+    }
+    historySnapshot.docs.forEach(function (historyDocument) {
+      const history = historyDocument.data();
+      const row = document.createElement("li");
+      const completedAt = history.completedAt
+        && typeof history.completedAt.toDate === "function"
+        ? history.completedAt.toDate().toLocaleString("vi-VN")
+        : "Thời gian chưa xác định";
+      const correctCount = Number.isInteger(history.correctCount) ? history.correctCount : 0;
+      const totalQuestions = Number.isInteger(history.totalQuestions)
+        ? history.totalQuestions
+        : QUIZ_DATA.length;
+      const score = Number.isInteger(history.score) ? history.score : 0;
+      row.textContent = completedAt + " · Đúng " + correctCount + "/" + totalQuestions
+        + " câu · Điểm đạt được: " + score;
+      challengeHistoryList.appendChild(row);
+    });
+    challengeHistoryStatus.textContent = "Hiển thị " + historySnapshot.size + " lượt gần nhất.";
+  } catch (error) {
+    console.error("Không thể tải lịch sử thử thách:", error);
+    challengeHistoryStatus.textContent = "Không thể tải lịch sử: " + error.message;
+    challengeHistoryStatus.classList.add("is-error");
+  }
+}
+
+async function finishChallenge() {
+  if (!challengeActive) {
+    return;
+  }
+  challengeActive = false;
+  challengeCompleted = true;
+  clearChallengeTimers();
+  challengePlayArea.hidden = true;
+  challengeSummary.hidden = false;
+  const completedStrongly = challengeCorrectCount >= 10;
+  challengeSummaryTitle.textContent = completedStrongly
+    ? "Bạn đã xuất sắc hoàn thành!"
+    : "Bạn đã hoàn thành thử thách!";
+  challengeSummaryResult.textContent = "Bạn đã trả lời đúng " + challengeCorrectCount
+    + "/" + QUIZ_DATA.length + " câu. "
+    + (completedStrongly
+      ? "Quá tuyệt vời!"
+      : "Cần cố gắng ôn tập thêm kiến thức văn hóa vùng mình nhé!")
+    + " · Sai " + challengeIncorrectCount + " · Bỏ qua " + challengeSkippedCount
+    + " · Hết giờ " + challengeTimedOutCount + ".";
+  challengeTimerBar.style.width = "0%";
+  challengeTimer.setAttribute("aria-valuenow", "0");
+  challengeFeedback.classList.remove("is-error");
+  challengeSummaryScore.textContent = challengeAdminTestMode
+    ? "Điểm lượt kiểm tra: " + challengeRoundScoreValue + "."
+    : "Điểm mới đạt được: " + challengeRoundScoreValue + ".";
+  challengeSummaryStatus.classList.remove("is-error");
+  challengeSummaryStatus.textContent = challengeAdminTestMode
+    ? "Lượt kiểm tra Admin không được lưu vào điểm số hoặc lịch sử."
+    : "Đang lưu kết quả và lịch sử...";
+  closeChallengeButton.textContent = "Quay lại trang chủ";
+  closeChallengeButton.disabled = true;
+
+  const scoreSaved = await saveChallengeRound();
+  challengeSummaryScore.textContent = challengeAdminTestMode
+    ? "Điểm lượt kiểm tra: " + challengeRoundScoreValue + "."
+    : "Điểm mới đạt được: " + challengeRoundScoreValue + ".";
+  if (challengeAdminTestMode) {
+    closeChallengeButton.disabled = false;
+    return;
+  }
+  if (!scoreSaved) {
+    challengeSummaryStatus.textContent = challengeFeedback.textContent;
+    challengeSummaryStatus.classList.add("is-error");
+    closeChallengeButton.disabled = false;
+    return;
+  }
+  try {
+    const historySaved = await saveChallengeHistory();
+    challengeSummaryStatus.textContent = historySaved
+      ? "Kết quả và lịch sử lượt chơi đã được lưu riêng tư."
+      : "Điểm đã được lưu; lượt kiểm tra Admin không được lưu lịch sử.";
+  } catch (error) {
+    console.error("Không thể lưu lịch sử thử thách:", error);
+    challengeSummaryStatus.textContent = "Điểm đã được lưu, nhưng không thể lưu lịch sử: "
+      + error.message;
+    challengeSummaryStatus.classList.add("is-error");
+  }
+  startChallengeButton.disabled = false;
+  closeChallengeButton.disabled = false;
+}
+
+async function closeChallenge() {
+  if (challengeCompleted && !challengeSaved && challengeRoundScoreValue > 0) {
+    closeChallengeButton.disabled = true;
+    const saved = await saveChallengeRound();
+    if (!saved) {
+      challengeSummaryStatus.textContent = challengeFeedback.textContent;
+      challengeSummaryStatus.classList.add("is-error");
+      return;
+    }
+    challengeSummaryScore.textContent = "Điểm mới đạt được: " + challengeRoundScoreValue + ".";
+    try {
+      await saveChallengeHistory();
+      challengeSummaryStatus.textContent = "Kết quả và lịch sử lượt chơi đã được lưu riêng tư.";
+      challengeSummaryStatus.classList.remove("is-error");
+    } catch (error) {
+      console.error("Không thể lưu lịch sử thử thách:", error);
+      challengeSummaryStatus.textContent = "Điểm đã được lưu, nhưng không thể lưu lịch sử: "
+        + error.message;
+      challengeSummaryStatus.classList.add("is-error");
+    }
+  }
+  if (challengeCompleted) {
+    if (challengeDialog.open) {
+      challengeDialog.close();
+    }
+    startChallengeButton.disabled = false;
+    window.location.hash = "home-link";
+    document.getElementById("home-link").scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  if (challengeCancelled) {
+    challengeDialog.close();
+    startChallengeButton.disabled = false;
+    window.location.hash = "home-link";
+    document.getElementById("home-link").scrollIntoView({ behavior: "smooth", block: "start" });
+    return;
+  }
+  challengeActive = false;
+  clearChallengeTimers();
+  if (!challengeSaved && challengeRoundScoreValue > 0) {
+    const saved = await saveChallengeRound();
+    if (!saved) {
+      return;
+    }
+  }
+  if (challengeDialog.open) {
+    challengeDialog.close();
+  }
+  startChallengeButton.disabled = false;
+}
+
+async function startChallenge() {
+  if (!currentUser) {
+    window.alert("Vui lòng đăng nhập bằng Google để lưu điểm thử thách.");
+    if (firebaseReady) {
+      loginBtn.click();
+    }
+    return;
+  }
+  if (!firebaseReady || startChallengeButton.disabled) {
+    return;
+  }
+  startChallengeButton.disabled = true;
+  challengeRoundScoreValue = 0;
+  challengeQuestionIndex = 0;
+  challengeViolationCount = 0;
+  challengeCorrectCount = 0;
+  challengeIncorrectCount = 0;
+  challengeSkippedCount = 0;
+  challengeTimedOutCount = 0;
+  challengeSaved = false;
+  challengeActive = false;
+  challengeCancelled = false;
+  challengeCompleted = false;
+  challengeAdminTestMode = isAdminUser(currentUser);
+  roundCorrectQuestionIds = new Set();
+  completedChallengeQuestionIds = new Set();
+  challengeIntegrityWarning.hidden = true;
+  challengeIntegrityWarning.classList.remove("is-cancelled");
+  challengeIntegrityWarning.textContent = "";
+  challengePlayArea.hidden = false;
+  challengeSummary.hidden = true;
+  challengeSummaryResult.textContent = "";
+  challengeSummaryScore.textContent = "";
+  challengeSummaryStatus.textContent = "";
+  challengeSummaryStatus.classList.remove("is-error");
+  challengeHistoryPanel.hidden = true;
+  challengeHistoryButton.setAttribute("aria-expanded", "false");
+  challengeHistoryStatus.textContent = "";
+  challengeHistoryList.replaceChildren();
+  challengeHistoryButton.disabled = false;
+  closeChallengeButton.textContent = "Thoát thử thách";
+  closeChallengeButton.disabled = false;
+  challengeRoundScore.textContent = "Điểm lượt này: 0";
+  challengeFeedback.classList.remove("is-error");
+  challengeFeedback.textContent = "Đang tải điểm cá nhân...";
+  challengeQuestion.textContent = "";
+  challengeOptions.replaceChildren();
+  challengeSkipButton.disabled = true;
+  challengeProgressInfo.textContent = "";
+  challengeScoreValue.textContent = "Đang tải...";
+  challengeAdminTestNotice.hidden = !challengeAdminTestMode;
+  challengeScoreLabel.textContent = challengeAdminTestMode ? "Điểm lượt test" : "Điểm của bạn";
+  challengeTimerBar.style.width = "100%";
+  if (!challengeDialog.open) {
+    challengeDialog.showModal();
+  }
+  const uid = currentUser.uid;
+  if (challengeAdminTestMode) {
+    challengeScore = 0;
+    completedChallengeQuestionIds = new Set();
+    challengeScoreValue.textContent = "0 điểm test";
+    challengeFeedback.textContent = "";
+    challengeDocumentHidden = document.hidden;
+    challengeWindowBlurred = !document.hasFocus();
+    challengeFocusLossRecorded = challengeDocumentHidden || challengeWindowBlurred;
+    challengeActive = true;
+    renderChallengeQuestion();
+    return;
+  }
+  try {
+    const scoreSnapshot = await getDoc(challengeScoreRef(uid));
+    if (!currentUser || currentUser.uid !== uid || !challengeDialog.open) {
+      return;
+    }
+    const scoreData = scoreSnapshot.exists() ? scoreSnapshot.data() : {};
+    challengeScore = Number.isInteger(scoreData.score) ? scoreData.score : 0;
+    completedChallengeQuestionIds = new Set(
+      Array.isArray(scoreData.correctQuestionIds)
+        ? scoreData.correctQuestionIds.filter(function (questionId) {
+          return typeof questionId === "string";
+        })
+        : []
+    );
+    challengeScoreValue.textContent = challengeScore + " điểm";
+    challengeFeedback.textContent = "";
+    challengeDocumentHidden = document.hidden;
+    challengeWindowBlurred = !document.hasFocus();
+    challengeFocusLossRecorded = challengeDocumentHidden || challengeWindowBlurred;
+    challengeActive = true;
+    renderChallengeQuestion();
+  } catch (error) {
+    console.error("Không thể tải điểm thử thách:", error);
+    challengeFeedback.textContent = "Không thể tải điểm cá nhân: " + error.message;
+    challengeFeedback.classList.add("is-error");
+    startChallengeButton.disabled = false;
+  }
+}
+
+startChallengeButton.addEventListener("click", startChallenge);
+closeChallengeButton.addEventListener("click", closeChallenge);
+challengeSummaryHomeButton.addEventListener("click", closeChallenge);
+challengeSkipButton.addEventListener("click", function () {
+  chooseChallengeAnswer(-2);
+});
+challengeHistoryButton.addEventListener("click", function () {
+  const isOpening = challengeHistoryPanel.hidden;
+  challengeHistoryPanel.hidden = !isOpening;
+  challengeHistoryButton.setAttribute("aria-expanded", String(isOpening));
+  if (isOpening) {
+    loadChallengeHistory();
+  }
+});
+challengeDialog.addEventListener("cancel", function (event) {
+  event.preventDefault();
+  closeChallenge();
+});
 
 // Khởi tạo Firebase App, Firestore, Storage, Authentication và Analytics.
 try {
@@ -1348,6 +2777,7 @@ async function openProfile(userId) {
   updateAuthControls();
   profilePageContent.hidden = true;
   privateProfileMessage.hidden = true;
+  profileChallengeScore.hidden = true;
   privacySettingsForm.hidden = true;
   profilePageEmail.hidden = true;
   profilePostsList.replaceChildren();
@@ -1397,6 +2827,25 @@ async function openProfile(userId) {
     profilePageEmail.textContent = activeProfileIsOwner && currentUser.email
       ? currentUser.email
       : "";
+    const showPrivateMemberScore = activeProfileIsOwner && !isAdminUser(currentUser);
+    profileChallengeScore.hidden = !showPrivateMemberScore;
+    if (showPrivateMemberScore) {
+      profileChallengeScoreValue.textContent = "Đang tải...";
+      try {
+        const scoreSnapshot = await getDoc(challengeScoreRef(userId));
+        if (requestId !== profileRequestId) {
+          return;
+        }
+        const scoreData = scoreSnapshot.exists() ? scoreSnapshot.data() : {};
+        profileChallengeScoreValue.textContent =
+          (Number.isInteger(scoreData.score) ? scoreData.score : 0) + " điểm";
+      } catch (error) {
+        if (requestId === profileRequestId) {
+          profileChallengeScoreValue.textContent = "Không tải được điểm";
+          setProfilePageStatus("Không thể tải điểm thử thách: " + error.message, true);
+        }
+      }
+    }
 
     privacySettingsForm.hidden = !activeProfileIsOwner;
     profileVisibilityInput.value = privacySettings.profileVisibility === "private"
@@ -2531,6 +3980,7 @@ if (firebaseReady) {
     async function (user) {
       currentUser = user;
       subscribeToAdminMembers(user);
+      subscribeToAdminGifts(user);
       currentPostCount = 0;
       currentViolationCount = 0;
       currentUserBanned = false;
@@ -2538,6 +3988,9 @@ if (firebaseReady) {
       if (!user && currentProfileUnsubscribe) {
         currentProfileUnsubscribe();
         currentProfileUnsubscribe = null;
+      }
+      if (!user && challengeDialog.open) {
+        closeChallenge();
       }
       updateAuthControls(user);
       renderPosts();

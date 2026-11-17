@@ -176,6 +176,10 @@
             <p id="profile-page-email" class="profile-page-email"></p>
           </div>
         </div>
+        <section id="profile-challenge-score" class="profile-challenge-score" hidden aria-label="Điểm thử thách của bạn">
+          <span>Điểm trải nghiệm của bạn</span>
+          <strong id="profile-challenge-score-value">0 điểm</strong>
+        </section>
 
         <div id="member-tools" class="member-tools" hidden>
           <p id="post-count" class="post-count" aria-live="polite">Số bài của bạn: 0/15</p>
@@ -243,6 +247,71 @@
       </div>
     </section>
   </main>
+
+  <section class="challenge-promo container" aria-labelledby="challenge-title">
+    <div class="challenge-promo-copy">
+      <span class="challenge-kicker">KHÁM PHÁ · GHI NHỚ · NHẬN QUÀ</span>
+      <h2 id="challenge-title">TRẢI NGHIỆM &amp; THỬ THÁCH</h2>
+      <p>Kiểm tra hiểu biết về văn hóa &amp; vùng đất Bắc Khánh Vĩnh — Tích lũy 500 điểm để nhận quà tri ân!</p>
+    </div>
+    <button id="start-challenge" class="button challenge-start-button" type="button">Bắt đầu thử thách</button>
+  </section>
+
+  <dialog id="challenge-dialog" class="challenge-dialog" aria-labelledby="challenge-dialog-title">
+    <div class="challenge-modal">
+      <div class="challenge-modal-header">
+        <div>
+          <span class="challenge-kicker">VĂN HÓA · ĐỊA LÝ</span>
+          <h2 id="challenge-dialog-title">Trải nghiệm &amp; Thử thách</h2>
+        </div>
+        <div class="challenge-score" aria-live="polite">
+          <span id="challenge-score-label">Điểm của bạn</span>
+          <strong id="challenge-score-value">Đang tải...</strong>
+        </div>
+      </div>
+      <p id="challenge-admin-test-notice" class="challenge-admin-test-notice" role="status" hidden>
+        Chế độ kiểm tra (Admin): Kết quả không tính điểm.
+      </p>
+      <p id="challenge-integrity-warning" class="challenge-integrity-warning" role="alert" aria-live="assertive" hidden></p>
+      <div id="challenge-play-area">
+        <div id="challenge-progress-info" class="challenge-progress-info" aria-live="polite"></div>
+        <div class="challenge-timer" role="progressbar" aria-label="Thời gian trả lời" aria-valuemin="0" aria-valuemax="10" aria-valuenow="10">
+          <span id="challenge-timer-bar"></span>
+        </div>
+        <h3 id="challenge-question" class="challenge-question"></h3>
+        <div id="challenge-options" class="challenge-options"></div>
+        <button id="challenge-skip" class="button button-outline challenge-skip-button" type="button">
+          Không biết / Xem đáp án
+        </button>
+        <p id="challenge-feedback" class="challenge-feedback" role="status" aria-live="polite"></p>
+      </div>
+      <section id="challenge-summary" class="challenge-summary" aria-labelledby="challenge-summary-title" hidden>
+        <div class="challenge-summary-icon" aria-hidden="true">🎆🏆</div>
+        <h3 id="challenge-summary-title">Chúc mừng bạn đã hoàn thành xuất sắc Trải nghiệm &amp; Thử thách!</h3>
+        <p id="challenge-summary-result" class="challenge-summary-result"></p>
+        <p id="challenge-summary-score" class="challenge-summary-score"></p>
+        <p id="challenge-summary-status" class="challenge-summary-status" role="status" aria-live="polite"></p>
+        <button id="challenge-summary-home" class="button button-outline challenge-summary-home" type="button" aria-label="Quay về trang chủ">X · Về trang chủ</button>
+      </section>
+      <section id="challenge-history-panel" class="challenge-history-panel" aria-labelledby="challenge-history-title" hidden>
+        <h3 id="challenge-history-title">Lịch sử làm bài gần đây</h3>
+        <p id="challenge-history-status" class="challenge-history-status" role="status" aria-live="polite"></p>
+        <ol id="challenge-history-list" class="challenge-history-list"></ol>
+      </section>
+      <div class="challenge-modal-footer">
+        <span id="challenge-round-score">Điểm lượt này: 0</span>
+        <div class="challenge-modal-actions">
+          <button id="challenge-history-button" class="button button-outline" type="button" aria-expanded="false" aria-controls="challenge-history-panel">Lịch sử làm bài</button>
+          <button id="close-challenge" class="button button-outline" type="button">Thoát thử thách</button>
+        </div>
+      </div>
+    </div>
+    <aside id="challenge-reaction" class="challenge-reaction" role="status" aria-live="polite" hidden>
+      <img id="challenge-reaction-image" alt="" hidden>
+      <p id="challenge-reaction-error" class="challenge-reaction-error" hidden></p>
+      <p id="challenge-reaction-caption" class="challenge-reaction-caption"></p>
+    </aside>
+  </dialog>
 
   <!-- Chân trang -->
   <footer class="site-footer">
