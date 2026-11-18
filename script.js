@@ -41,7 +41,7 @@ const MAX_FILE_SIZES = {
   audio: 10 * 1024 * 1024,
   video: 20 * 1024 * 1024
 };
-const MAX_INLINE_IMAGE_SIZE = 2 * 1024 * 1024;
+const UPLOAD_INACTIVITY_TIMEOUT_MS = 2 * 60 * 1000;
 const MAX_FIRESTORE_POST_SIZE_BYTES = 900 * 1024;
 const AUDIO_TOO_LARGE_MESSAGE =
   "Tệp ghi âm quá lớn! Vui lòng chọn file ghi âm có dung lượng dưới 10MB.";
@@ -2031,29 +2031,6 @@ function collectAttachments() {
   return attachments;
 }
 
-function readFileAsDataUrl(file) {
-  if (file.size >= MAX_INLINE_IMAGE_SIZE) {
-    return Promise.reject(new Error(
-      "Ảnh \"" + file.name + "\" phải có dung lượng dưới 2 MB."
-    ));
-  }
-
-  return new Promise(function (resolve, reject) {
-    const reader = new FileReader();
-    reader.onload = function () {
-      if (typeof reader.result !== "string") {
-        reject(new Error("Không thể chuyển ảnh \"" + file.name + "\" sang Base64."));
-        return;
-      }
-      resolve(reader.result);
-    };
-    reader.onerror = function () {
-      reject(reader.error || new Error("Không thể đọc ảnh \"" + file.name + "\"."));
-    };
-    reader.readAsDataURL(file);
-  });
-}
-
 function createMediaElement(attachment, source) {
   let element;
   if (attachment.kind === "image") {
@@ -2457,9 +2434,12 @@ function renderPosts() {
     content.textContent = post.content;
     card.appendChild(content);
 
-    const postMedia = post.imageUrl
-      ? [{ name: "Hình ảnh", kind: "image", url: post.imageUrl }].concat(post.attachments)
-      : post.attachments;
+    const postMedia = post.attachments.slice();
+    if (post.imageUrl && !postMedia.some(function (attachment) {
+      return attachment.url === post.imageUrl;
+    })) {
+      postMedia.unshift({ name: "Hình ảnh", kind: "image", url: post.imageUrl });
+    }
     if (postMedia.length > 0) {
       const media = document.createElement("div");
       media.className = "post-media";
@@ -2946,55 +2926,135 @@ privacySettingsForm.addEventListener("submit", async function (event) {
   }
 });
 
-// Tải một tệp lên Storage và trả về URL cùng đường dẫn để lưu trong Firestore.
-function uploadAttachment(userId, postId, attachment, index, fixedPath) {
-  if (!attachment.type || !/^(image|video|audio)\//.test(attachment.type)) {
-    return Promise.reject(new Error("Không xác định được định dạng tệp: " + attachment.name));
+function describeStorageUploadError(error, fileName) {
+  const code = error && typeof error.code === "string" ? error.code : "";
+  const message = error && typeof error.message === "string"
+    ? error.message
+    : "Lỗi không xác định.";
+  let explanation = "";
+
+  if (code === "storage/unauthorized") {
+    explanation = "Storage từ chối quyền truy cập. Hãy kiểm tra đăng nhập và Firebase Storage Rules.";
+  } else if (code === "storage/retry-limit-exceeded") {
+    explanation = "Kết nối mạng không ổn định hoặc yêu cầu tải lên đã hết số lần thử.";
+  } else if (code === "storage/quota-exceeded") {
+    explanation = "Dự án đã vượt hạn mức lưu trữ.";
+  } else if (code === "storage/canceled") {
+    explanation = "Tác vụ tải lên đã bị hủy.";
+  } else if (code === "storage/bucket-not-found" || code === "storage/no-default-bucket") {
+    explanation = "Không tìm thấy Firebase Storage bucket; hãy kiểm tra cấu hình storageBucket.";
+  } else if (code === "storage/unknown") {
+    explanation = "Storage gặp lỗi không xác định; hãy kiểm tra mạng, CORS và Storage Rules.";
+  } else if (/network|cors|cross-origin/i.test(message)) {
+    explanation = "Có thể đã xảy ra lỗi mạng hoặc CORS.";
   }
+
+  return new Error(
+    "Không thể tải lên \"" + fileName + "\""
+      + (code ? " (" + code + ")" : "")
+      + ": " + (explanation ? explanation + " Chi tiết: " : "") + message
+  );
+}
+
+// Tải tệp lên Storage theo luồng resumable; Firestore chỉ lưu URL và metadata.
+async function uploadAttachment(userId, postId, attachment, index, fixedPath) {
   const maxSize = MAX_FILE_SIZES[attachment.kind];
-  if (!maxSize || attachment.blob.size > maxSize) {
+  if (!maxSize) {
+    throw new Error("Loại tệp không được hỗ trợ: " + attachment.name);
+  }
+  if (!attachment.type || !attachment.type.toLowerCase().startsWith(attachment.kind + "/")) {
+    throw new Error(
+      "Không nhận diện được định dạng " + attachment.kind + " của tệp \""
+        + attachment.name + "\". Hãy chọn đúng loại tệp."
+    );
+  }
+  if (attachment.blob.size === 0) {
+    throw new Error("Tệp \"" + attachment.name + "\" không có dữ liệu.");
+  }
+  if (attachment.blob.size > maxSize) {
     if (attachment.kind === "audio") {
-      return Promise.reject(new Error(AUDIO_TOO_LARGE_MESSAGE));
+      throw new Error(AUDIO_TOO_LARGE_MESSAGE);
     }
-    const maxMegabytes = maxSize ? maxSize / (1024 * 1024) : 0;
-    return Promise.reject(new Error(
-      "Tệp \"" + attachment.name + "\" vượt quá giới hạn " + maxMegabytes + " MB."
-    ));
+    throw new Error(
+      "Tệp \"" + attachment.name + "\" vượt quá giới hạn "
+        + (maxSize / (1024 * 1024)) + " MB."
+    );
   }
 
   const safeName = attachment.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 100) || "tep-dinh-kem";
   const storagePath = fixedPath || (
     "posts/" + userId + "/" + postId + "/" + index + "-" + safeName
   );
-  const fileRef = ref(storage, storagePath);
-  const uploadTask = uploadBytesResumable(fileRef, attachment.blob, {
-    contentType: attachment.type
-  });
 
-  return new Promise(function (resolve, reject) {
-    uploadTask.on(
-      "state_changed",
-      function (snapshot) {
-        const progress = Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100);
-        showStatus("Đang tải lên " + attachment.name + " (" + progress + "%)...", false);
-      },
-      reject,
-      async function () {
-        try {
-          const url = await getDownloadURL(uploadTask.snapshot.ref);
-          resolve({
-            name: attachment.name,
-            type: attachment.type,
-            kind: attachment.kind,
-            url: url,
-            storagePath: storagePath
-          });
-        } catch (error) {
-          reject(error);
-        }
+  try {
+    const fileRef = ref(storage, storagePath);
+    const uploadTask = uploadBytesResumable(fileRef, attachment.blob, {
+      contentType: attachment.type
+    });
+
+    await new Promise(function (resolve, reject) {
+      let timeoutId;
+      let lastBytesTransferred = 0;
+      let inactivityError = null;
+      function clearInactivityTimeout() {
+        window.clearTimeout(timeoutId);
       }
-    );
-  });
+      function resetInactivityTimeout() {
+        clearInactivityTimeout();
+        timeoutId = window.setTimeout(function () {
+          inactivityError = new Error(
+            "Không nhận được tiến trình tải lên tệp \"" + attachment.name
+              + "\" trong 2 phút. Hãy kiểm tra kết nối mạng rồi thử lại."
+          );
+          uploadTask.cancel();
+          reject(inactivityError);
+        }, UPLOAD_INACTIVITY_TIMEOUT_MS);
+      }
+
+      resetInactivityTimeout();
+      try {
+        uploadTask.on(
+          "state_changed",
+          function (snapshot) {
+            if (snapshot.bytesTransferred > lastBytesTransferred) {
+              lastBytesTransferred = snapshot.bytesTransferred;
+              resetInactivityTimeout();
+            }
+            const progress = snapshot.totalBytes
+              ? Math.round((snapshot.bytesTransferred / snapshot.totalBytes) * 100)
+              : 0;
+            showStatus("Đang tải lên " + attachment.name + " (" + progress + "%)...", false);
+          },
+          function (error) {
+            clearInactivityTimeout();
+            reject(inactivityError || describeStorageUploadError(error, attachment.name));
+          },
+          function () {
+            clearInactivityTimeout();
+            resolve();
+          }
+        );
+      } catch (error) {
+        clearInactivityTimeout();
+        reject(error);
+      }
+    });
+
+    const url = await getDownloadURL(uploadTask.snapshot.ref);
+    return {
+      name: attachment.name,
+      type: attachment.type,
+      kind: attachment.kind,
+      url: url,
+      storagePath: storagePath
+    };
+  } catch (error) {
+    if (error && error.message
+      && error.message.startsWith("Không thể tải lên \"" + attachment.name + "\"")) {
+      throw error;
+    }
+    throw describeStorageUploadError(error, attachment.name);
+  }
 }
 
 async function removeUploadedFiles(attachments) {
@@ -3550,9 +3610,6 @@ form.addEventListener("submit", async function (event) {
     return;
   }
   const oversizedAttachment = selectedAttachments.find(function (attachment) {
-    if (attachment.kind === "image") {
-      return attachment.blob.size >= MAX_INLINE_IMAGE_SIZE;
-    }
     return !MAX_FILE_SIZES[attachment.kind]
       || attachment.blob.size > MAX_FILE_SIZES[attachment.kind];
   });
@@ -3561,13 +3618,10 @@ form.addEventListener("submit", async function (event) {
       showAudioTooLarge();
       return;
     }
-    const maxSize = oversizedAttachment.kind === "image"
-      ? MAX_INLINE_IMAGE_SIZE
-      : (MAX_FILE_SIZES[oversizedAttachment.kind] || 0);
+    const maxSize = MAX_FILE_SIZES[oversizedAttachment.kind] || 0;
     showStatus(
       "Tệp \"" + oversizedAttachment.name + "\" vượt quá giới hạn "
-        + (maxSize / (1024 * 1024)) + " MB"
-        + (oversizedAttachment.kind === "image" ? " (ảnh phải nhỏ hơn giới hạn)." : "."),
+        + (maxSize / (1024 * 1024)) + " MB.",
       true
     );
     return;
@@ -3585,28 +3639,16 @@ form.addEventListener("submit", async function (event) {
   try {
     for (let index = 0; index < selectedAttachments.length; index += 1) {
       const attachment = selectedAttachments[index];
-      if (attachment.kind === "image") {
-        showStatus("Đang chuyển ảnh " + attachment.name + " sang Base64...", false);
-        const imageUrl = await readFileAsDataUrl(attachment.blob);
-        if (!postDataImageUrl) {
-          postDataImageUrl = imageUrl;
-        } else {
-          postAttachments.push({
-            name: attachment.name,
-            type: attachment.type,
-            kind: attachment.kind,
-            url: imageUrl
-          });
-        }
-      } else {
-        const uploadedAttachment = await uploadAttachment(
-          user.uid,
-          postRef.id,
-          attachment,
-          index
-        );
-        uploaded.push(uploadedAttachment);
-        postAttachments.push(uploadedAttachment);
+      const uploadedAttachment = await uploadAttachment(
+        user.uid,
+        postRef.id,
+        attachment,
+        index
+      );
+      uploaded.push(uploadedAttachment);
+      postAttachments.push(uploadedAttachment);
+      if (attachment.kind === "image" && !postDataImageUrl) {
+        postDataImageUrl = uploadedAttachment.url;
       }
     }
 
