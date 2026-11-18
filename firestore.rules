@@ -133,7 +133,6 @@ service cloud.firestore {
           'displayName',
           'photoURL',
           'avatarURL',
-          'avatarPath',
           'postCount',
           'violationCount',
           'isBanned',
@@ -145,7 +144,6 @@ service cloud.firestore {
           'displayName',
           'photoURL',
           'avatarURL',
-          'avatarPath',
           'postCount',
           'violationCount',
           'isBanned',
@@ -158,7 +156,6 @@ service cloud.firestore {
         && request.resource.data.displayName.size() <= 60
         && request.resource.data.photoURL is string
         && request.resource.data.avatarURL is string
-        && request.resource.data.avatarPath is string
         && request.resource.data.postCount is int
         && request.resource.data.postCount >= 0
         && (request.resource.data.postCount <= 15 || isAdmin())
@@ -179,7 +176,6 @@ service cloud.firestore {
           'displayName',
           'photoURL',
           'avatarURL',
-          'avatarPath',
           'postCount',
           'violationCount',
           'isBanned',
@@ -191,7 +187,6 @@ service cloud.firestore {
           'displayName',
           'photoURL',
           'avatarURL',
-          'avatarPath',
           'postCount',
           'violationCount',
           'isBanned',
@@ -204,7 +199,6 @@ service cloud.firestore {
         && request.resource.data.displayName.size() <= 60
         && request.resource.data.photoURL is string
         && request.resource.data.avatarURL is string
-        && request.resource.data.avatarPath is string
         && request.resource.data.postCount is int
         && request.resource.data.postCount >= resource.data.postCount
         && request.resource.data.postCount <= resource.data.postCount + 1

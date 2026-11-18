@@ -969,6 +969,30 @@ p {
   color: #386342;
 }
 
+.upload-debug-panel {
+  margin-top: 16px;
+  padding: 12px;
+  border: 1px solid #d6c6b0;
+  border-radius: 4px;
+  background: #fffdfa;
+}
+
+.upload-debug-panel h3 {
+  margin: 0 0 8px;
+  color: var(--clay);
+  font-size: 13px;
+}
+
+#upload-debug-log {
+  max-height: 220px;
+  margin: 0;
+  overflow: auto;
+  color: #40382f;
+  font: 11px/1.5 Consolas, "Courier New", monospace;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 .posts-section {
   margin-top: 48px;
 }

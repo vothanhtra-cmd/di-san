@@ -126,7 +126,7 @@
             <input id="image-files" type="file" accept="image/*" multiple>
           </label>
           <label class="file-picker">
-            <span>Video (tối đa 20 MB/tệp)</span>
+            <span>Video (tối đa 50 MB/tệp)</span>
             <input id="video-files" type="file" accept="video/*" multiple>
           </label>
           <label class="file-picker">
@@ -150,6 +150,10 @@
           <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
           <button id="submit-button" class="button button-primary" type="submit">Đăng bài</button>
         </div>
+        <section class="upload-debug-panel" aria-labelledby="upload-debug-title">
+          <h3 id="upload-debug-title">Nhật ký quá trình đăng bài</h3>
+          <pre id="upload-debug-log" role="log" aria-live="polite">Nhật ký sẽ hiển thị sau khi bấm “Đăng bài”.</pre>
+        </section>
       </form>
     </section>
 
