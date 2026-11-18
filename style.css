@@ -969,28 +969,73 @@ p {
   color: #386342;
 }
 
-.upload-debug-panel {
-  margin-top: 16px;
-  padding: 12px;
-  border: 1px solid #d6c6b0;
-  border-radius: 4px;
+.post-progress-panel {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid #e6d9cd;
+  border-radius: 10px;
   background: #fffdfa;
 }
 
-.upload-debug-panel h3 {
-  margin: 0 0 8px;
-  color: var(--clay);
-  font-size: 13px;
+.post-progress-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 7px;
 }
 
-#upload-debug-log {
-  max-height: 220px;
+.post-progress-message {
   margin: 0;
-  overflow: auto;
-  color: #40382f;
-  font: 11px/1.5 Consolas, "Courier New", monospace;
-  overflow-wrap: anywhere;
-  white-space: pre-wrap;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.post-progress-percent {
+  flex: 0 0 auto;
+  color: #6b2424;
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.post-progress-track {
+  height: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eee5de;
+}
+
+.post-progress-fill {
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: #6b2424;
+  transition: width 180ms ease;
+}
+
+.post-progress-panel.is-success {
+  border-color: #c9ddcd;
+  background: #f5faf5;
+}
+
+.post-progress-panel.is-success .post-progress-message,
+.post-progress-panel.is-success .post-progress-percent {
+  color: #386342;
+}
+
+.post-progress-panel.is-success .post-progress-fill {
+  background: #54845f;
+}
+
+.post-progress-panel.is-error {
+  border-color: #edcccc;
+  background: #fff7f6;
+}
+
+.post-progress-panel.is-error .post-progress-message {
+  color: #a1271c;
 }
 
 .posts-section {

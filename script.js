@@ -357,7 +357,11 @@ const avatarInput = document.getElementById("avatar-file");
 const avatarStatus = document.getElementById("avatar-status");
 const formStatus = document.getElementById("form-status");
 const submitButton = document.getElementById("submit-button");
-const uploadDebugLog = document.getElementById("upload-debug-log");
+const postProgressPanel = document.getElementById("post-progress-panel");
+const postProgressMessage = document.getElementById("post-progress-message");
+const postProgressPercent = document.getElementById("post-progress-percent");
+const postProgressTrack = document.getElementById("post-progress-track");
+const postProgressFill = document.getElementById("post-progress-fill");
 const previewSection = document.getElementById("preview-section");
 const previewList = document.getElementById("preview-list");
 const postsList = document.getElementById("posts-list");
@@ -541,6 +545,7 @@ let isUpdatingDisplayName = false;
 let posts = [];
 let currentCategory = null;
 let isSubmitting = false;
+let postProgressHideTimeout = null;
 let isMigrating = false;
 let pendingRecording = null;
 let recorder = null;
@@ -597,23 +602,78 @@ function showStatus(message, isError, isSuccess) {
   formStatus.classList.toggle("is-success", Boolean(isSuccess));
 }
 
-function logPostStep(message) {
-  const line = "[" + new Date().toLocaleTimeString() + "] " + message;
-  console.info("[post-upload]", message);
-  if (!uploadDebugLog) {
-    return;
-  }
-  if (uploadDebugLog.textContent === "Nhật ký sẽ hiển thị sau khi bấm “Đăng bài”.") {
-    uploadDebugLog.textContent = "";
-  }
-  uploadDebugLog.textContent += line + "\n";
-  uploadDebugLog.scrollTop = uploadDebugLog.scrollHeight;
+function logPostStep() {
 }
 
-function clearPostLog() {
-  if (uploadDebugLog) {
-    uploadDebugLog.textContent = "";
+function clearPostProgressHideTimeout() {
+  if (postProgressHideTimeout !== null) {
+    window.clearTimeout(postProgressHideTimeout);
+    postProgressHideTimeout = null;
   }
+}
+
+function showPostProgress(message, percent) {
+  clearPostProgressHideTimeout();
+  showStatus("", false);
+  postProgressPanel.hidden = false;
+  postProgressPanel.classList.remove("is-error", "is-success");
+  postProgressPanel.setAttribute("aria-busy", "true");
+  postProgressMessage.textContent = message;
+  postProgressTrack.hidden = false;
+  postProgressPercent.hidden = false;
+  const safePercent = Math.max(0, Math.min(100, Math.round(percent)));
+  postProgressFill.style.width = safePercent + "%";
+  postProgressPercent.textContent = safePercent + "%";
+  postProgressTrack.setAttribute("aria-valuenow", String(safePercent));
+}
+
+function showPostError(message) {
+  clearPostProgressHideTimeout();
+  showStatus("", false);
+  postProgressPanel.hidden = false;
+  postProgressPanel.classList.remove("is-success");
+  postProgressPanel.classList.add("is-error");
+  postProgressPanel.setAttribute("aria-busy", "false");
+  postProgressMessage.textContent = "Lỗi: " + message;
+  postProgressTrack.hidden = true;
+  postProgressPercent.hidden = true;
+  postProgressFill.style.width = "0%";
+  postProgressTrack.setAttribute("aria-valuenow", "0");
+}
+
+function showPostSuccess() {
+  showPostProgress("Đăng bài thành công!", 100);
+  postProgressPanel.classList.add("is-success");
+  postProgressPanel.setAttribute("aria-busy", "false");
+  postProgressHideTimeout = window.setTimeout(function () {
+    postProgressPanel.hidden = true;
+    postProgressHideTimeout = null;
+  }, 3000);
+}
+
+function getPostErrorMessage(error) {
+  const code = error && typeof error.code === "string" ? error.code : "";
+  const message = error && typeof error.message === "string" ? error.message : "";
+  if (code === "cloudinary/upload-failed" || /Cloudinary/i.test(message)) {
+    if (/network|cors|timeout|hủy|abort|failed to fetch/i.test(message)) {
+      return "Không thể kết nối với Cloudinary. Vui lòng kiểm tra mạng và thử lại.";
+    }
+    if (/preset|unsigned|format|file type|unsupported|invalid/i.test(message)) {
+      return "Cloudinary từ chối tệp. Hãy kiểm tra định dạng tệp và cấu hình Upload Preset.";
+    }
+    return "Không thể tải tệp lên Cloudinary. " + message;
+  }
+  if (["unavailable", "deadline-exceeded", "network-request-failed"].includes(code)
+    || /network|offline|failed to fetch/i.test(message)) {
+    return "Không thể kết nối với máy chủ Firebase. Vui lòng kiểm tra mạng và thử lại.";
+  }
+  if (code === "permission-denied") {
+    return "Firebase từ chối lưu bài viết. Vui lòng kiểm tra quyền truy cập.";
+  }
+  if (/vượt quá giới hạn/i.test(message)) {
+    return message;
+  }
+  return message || "Không thể đăng bài. Vui lòng thử lại.";
 }
 
 function setAdminMemberStatus(message, isError) {
@@ -3005,7 +3065,7 @@ function uploadToCloudinary(file, fileName, kind, onProgress) {
 }
 
 // Tải tệp lên Cloudinary; Firestore chỉ lưu secure_url và metadata.
-async function uploadAttachment(attachment) {
+async function uploadAttachment(attachment, onProgress) {
   const maxSize = MAX_FILE_SIZES[attachment.kind];
   if (!maxSize) {
     logPostStep("Kiểm tra tệp thất bại: loại tệp không được hỗ trợ (" + attachment.name + ").");
@@ -3040,21 +3100,8 @@ async function uploadAttachment(attachment) {
         + attachment.blob.size + " bytes, " + attachment.type + "."
   );
   try {
-    showStatus("Đang tải lên " + attachment.name + " Cloudinary...", false);
     logPostStep("Đang tải \"" + attachment.name + "\" trực tiếp lên Cloudinary.");
-    let lastLoggedProgress = -1;
-    const url = await uploadToCloudinary(
-      attachment.blob,
-      attachment.name,
-      attachment.kind,
-      function (progress) {
-        showStatus("Đang tải lên " + attachment.name + " (" + progress + "%)...", false);
-        if (progress === 100 || Math.floor(progress / 10) > Math.floor(lastLoggedProgress / 10)) {
-          lastLoggedProgress = progress;
-          logPostStep("Tiến trình " + attachment.name + ": " + progress + "%.");
-        }
-      }
-    );
+    const url = await uploadToCloudinary(attachment.blob, attachment.name, attachment.kind, onProgress);
     logPostStep("Cloudinary đã trả secure_url cho \"" + attachment.name + "\".");
     return {
       name: attachment.name,
@@ -3552,23 +3599,31 @@ async function migrateLegacyPosts(user) {
 
 // Đăng bài: tải tệp lên Cloudinary trước, sau đó lưu URL và nội dung trong Firestore.
 submitButton.addEventListener("click", function () {
-  clearPostLog();
-  logPostStep("Đã bấm nút Đăng bài; trình duyệt bắt đầu kiểm tra trường bắt buộc.");
+  clearPostProgressHideTimeout();
+  showPostProgress("Đang kiểm tra bài viết...", 0);
 });
 form.addEventListener("invalid", function (event) {
   const field = event.target;
-  const fieldName = field && (field.id || field.name) ? field.id || field.name : "không xác định";
-  logPostStep("Dừng do trình duyệt từ chối trường bắt buộc: " + fieldName + ".");
+  const validationMessages = {
+    "post-title": "Vui lòng nhập tiêu đề.",
+    "post-category": "Vui lòng chọn chuyên mục.",
+    "post-content": "Vui lòng nhập nội dung bài viết."
+  };
+  const fieldId = field && field.id ? field.id : "";
+  showPostError(validationMessages[fieldId] || "Vui lòng kiểm tra các trường bắt buộc.");
 }, true);
 
 form.addEventListener("submit", async function (event) {
   event.preventDefault();
-  clearPostLog();
+  clearPostProgressHideTimeout();
+  showPostProgress("Đang kiểm tra bài viết...", 0);
   logPostStep("Bắt đầu kiểm tra phiên đăng nhập và tệp đính kèm.");
   const user = auth ? auth.currentUser : null;
   if (!firebaseReady || !user) {
     logPostStep("Dừng: Firebase chưa sẵn sàng hoặc người dùng chưa đăng nhập.");
-    showStatus("Vui lòng đăng nhập bằng Google trước khi đăng bài.", true);
+    showPostError(firebaseReady
+      ? "Vui lòng đăng nhập bằng Google trước khi đăng bài."
+      : "Không thể kết nối với máy chủ Firebase.");
     return;
   }
   logPostStep("Đã xác nhận người dùng đăng nhập và Firebase sẵn sàng.");
@@ -3588,34 +3643,34 @@ form.addEventListener("submit", async function (event) {
       logPostStep("Đã kiểm tra số bài viết: " + existingPostCount + ".");
       if (querySnapshot.size >= MAX_POSTS_PER_USER) {
         logPostStep("Dừng: đã đạt giới hạn số bài viết.");
-        showStatus("Bạn đã đạt giới hạn tối đa 15 bài viết!", true);
+        showPostError("Bạn đã đạt giới hạn tối đa 15 bài viết.");
         return;
       }
     } catch (error) {
       logPostStep("Lỗi khi kiểm tra số bài: " + getTechnicalErrorDetails(error));
-      showStatus("Không thể kiểm tra số bài viết: " + getTechnicalErrorDetails(error), true);
+      showPostError(getPostErrorMessage(error));
       return;
     }
   }
 
   if (!profileReady) {
     logPostStep("Dừng: hồ sơ tài khoản chưa sẵn sàng.");
-    showStatus("Hồ sơ tài khoản đang được tải. Vui lòng thử lại.", true);
+    showPostError("Hồ sơ tài khoản đang được tải. Vui lòng thử lại.");
     return;
   }
   if (currentUserBanned) {
     logPostStep("Dừng: tài khoản đang bị khóa.");
-    showStatus("Tài khoản của bạn đã bị khóa vĩnh viễn do vi phạm nội dung 5 lần.", true);
+    showPostError("Tài khoản của bạn đã bị khóa vĩnh viễn.");
     return;
   }
   if (isMigrating) {
     logPostStep("Dừng: đang chuyển bài viết cũ.");
-    showStatus("Đang chuyển bài viết cũ lên Firebase. Vui lòng đợi.", true);
+    showPostError("Đang chuyển bài viết cũ. Vui lòng đợi.");
     return;
   }
   if ((recorder && recorder.state === "recording") || isFinalizingRecording) {
     logPostStep("Dừng: bản ghi âm chưa hoàn tất.");
-    showStatus("Hãy dừng ghi âm và đợi bản ghi hoàn tất trước khi đăng.", true);
+    showPostError("Hãy dừng ghi âm và đợi bản ghi hoàn tất trước khi đăng.");
     return;
   }
 
@@ -3624,7 +3679,7 @@ form.addEventListener("submit", async function (event) {
   logPostStep("Đã chọn " + selectedAttachments.length + " tệp đính kèm.");
   if (selectedAttachments.length > MAX_ATTACHMENTS_PER_POST) {
     logPostStep("Dừng: vượt số lượng tệp đính kèm tối đa.");
-    showStatus("Mỗi bài viết có thể đính kèm tối đa " + MAX_ATTACHMENTS_PER_POST + " tệp.", true);
+    showPostError("Mỗi bài viết có thể đính kèm tối đa " + MAX_ATTACHMENTS_PER_POST + " tệp.");
     return;
   }
   selectedAttachments.forEach(function (attachment) {
@@ -3638,6 +3693,7 @@ form.addEventListener("submit", async function (event) {
   if (containsBlockedLanguage(title) || containsBlockedLanguage(content)) {
     logPostStep("Dừng: nội dung không vượt qua kiểm tra từ ngữ.");
     await rejectInappropriateContent();
+    showPostError(formStatus.textContent || "Nội dung chứa từ ngữ không phù hợp.");
     return;
   }
   const oversizedAttachment = selectedAttachments.find(function (attachment) {
@@ -3646,16 +3702,10 @@ form.addEventListener("submit", async function (event) {
   });
   if (oversizedAttachment) {
     logPostStep("Dừng: tệp vượt giới hạn dung lượng (" + oversizedAttachment.name + ").");
-    if (oversizedAttachment.kind === "audio") {
-      showAudioTooLarge();
-      return;
-    }
     const maxSize = MAX_FILE_SIZES[oversizedAttachment.kind] || 0;
-    showStatus(
-      "Tệp \"" + oversizedAttachment.name + "\" vượt quá giới hạn "
-        + (maxSize / (1024 * 1024)) + " MB.",
-      true
-    );
+    const typeNames = { image: "Hình ảnh", video: "Video", audio: "Âm thanh" };
+    const typeName = typeNames[oversizedAttachment.kind] || "Tệp";
+    showPostError(typeName + " vượt quá " + (maxSize / (1024 * 1024)) + " MB/tệp.");
     return;
   }
   logPostStep("Kiểm tra tệp và nội dung hoàn tất.");
@@ -3663,7 +3713,7 @@ form.addEventListener("submit", async function (event) {
   const countBeforeSubmit = existingPostCount;
   isSubmitting = true;
   updateAuthControls();
-  showStatus("Đang lưu bài viết...", false);
+  showPostProgress("Đang đăng bài...", 0);
   logPostStep("Đã khóa nút đăng; bắt đầu tạo bài viết.");
 
   const postAttachments = [];
@@ -3673,14 +3723,22 @@ form.addEventListener("submit", async function (event) {
     logPostStep("Đã tạo ID bài viết: " + postRef.id + ".");
     for (let index = 0; index < selectedAttachments.length; index += 1) {
       const attachment = selectedAttachments[index];
-      const uploadedAttachment = await uploadAttachment(attachment);
+      const uploadedAttachment = await uploadAttachment(attachment, function (fileProgress) {
+        const overallProgress = Math.round(
+          ((index + fileProgress / 100) / selectedAttachments.length) * 90
+        );
+        showPostProgress(
+          "Đang tải lên tệp " + (index + 1) + "/" + selectedAttachments.length + "...",
+          overallProgress
+        );
+      });
       postAttachments.push(uploadedAttachment);
       if (attachment.kind === "image" && !postDataImageUrl) {
         postDataImageUrl = uploadedAttachment.url;
       }
     }
 
-    showStatus("Đã tải xong tệp; đang lưu bài viết...", false);
+    showPostProgress("Đang lưu bài viết...", 95);
     logPostStep("Bắt đầu lưu metadata bài viết vào Firestore.");
     const postData = {
       title: title,
@@ -3712,18 +3770,10 @@ form.addEventListener("submit", async function (event) {
     setRecordingStatus("Cho phép trình duyệt sử dụng micro khi được hỏi.", false);
     currentPostCount = Math.max(currentPostCount, countBeforeSubmit + 1);
     updateAuthControls();
-    showStatus("Đã đăng bài lên Firebase.", false, true);
-    alert("Đăng bài thành công.");
-    window.location.reload();
+    showPostSuccess();
   } catch (error) {
     logPostStep("Lỗi khi đăng bài: " + getTechnicalErrorDetails(error));
-    const cleanupNote = postAttachments.length
-      ? " Tệp đã tải lên Cloudinary không tự xóa được; hãy dọn thủ công trong Cloudinary Console nếu cần."
-      : "";
-    showStatus(
-      "Không thể đăng bài: " + getTechnicalErrorDetails(error) + cleanupNote,
-      true
-    );
+    showPostError(getPostErrorMessage(error));
   } finally {
     isSubmitting = false;
     updateAuthControls();

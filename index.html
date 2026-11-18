@@ -150,9 +150,22 @@
           <p id="form-status" class="form-status" role="status" aria-live="polite"></p>
           <button id="submit-button" class="button button-primary" type="submit">Đăng bài</button>
         </div>
-        <section class="upload-debug-panel" aria-labelledby="upload-debug-title">
-          <h3 id="upload-debug-title">Nhật ký quá trình đăng bài</h3>
-          <pre id="upload-debug-log" role="log" aria-live="polite">Nhật ký sẽ hiển thị sau khi bấm “Đăng bài”.</pre>
+        <section id="post-progress-panel" class="post-progress-panel" aria-live="polite" hidden>
+          <div class="post-progress-heading">
+            <p id="post-progress-message" class="post-progress-message"></p>
+            <span id="post-progress-percent" class="post-progress-percent" aria-hidden="true">0%</span>
+          </div>
+          <div
+            id="post-progress-track"
+            class="post-progress-track"
+            role="progressbar"
+            aria-label="Tiến trình đăng bài"
+            aria-valuemin="0"
+            aria-valuemax="100"
+            aria-valuenow="0"
+          >
+            <div id="post-progress-fill" class="post-progress-fill"></div>
+          </div>
         </section>
       </form>
     </section>
